@@ -1,0 +1,6 @@
+define CLikeCore = 'CLikeSCore';
+#(force-class-flush)
+------------------------
+
+include "./clike-cc.hl";
+

@@ -1,0 +1,15 @@
+
+function %peg-function-cdr(l) cdr(l)
+
+#(function __peg-stream-delta (s1 s2)
+    `(,(StreamEntry.idx s1) ,(StreamEntry.idx s2))
+    )
+
+#(macro peg-function-source ()
+   `(__peg-stream-delta saved (deref source)))
+
+#(macro peg-function-position ()
+   `(StreamEntry.idx saved))
+
+#(macro peg-function-region ()
+   `(__peg:get-delta saved (__peg:get-position_ source)))

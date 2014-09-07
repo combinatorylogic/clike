@@ -1,0 +1,196 @@
+#(macro type-case (t . args)
+  (with-syms (s)
+  `(alet ,s (r_GetType ,t)
+     (cond ,@(foreach-map (a args)
+               (if (eqv? (car a) 'else) a
+                   `((t_eq ,s ,(car a))
+                     (begin ,@(cdr a)))))))))
+
+#(function llvm-mdl (mdl) (format mdl (m prov ee fpm) m))
+#(function llvm-mdl-prov (mdl) (format mdl (m prov ee fpm) prov))
+#(function llvm-mdl-ee (mdl) (format mdl (m prov ee fpm) ee))
+#(function llvm-mdl-fpm (mdl) (format mdl (m prov ee fpm) fpm))
+#(function llvm-mdl-ph (mdl) (format mdl (m prov ee fpm mpm ph) ph))
+
+#(macro llvm_prefix (prefix x) 
+   `(alet res ((<r> "LLVM_"  ,prefix _ ?)  (string->list ,x))
+	 (cons (p-success? res) (list->string (p-rest res)))))
+
+#(define llvm_no_engine (mkref nil))
+
+define LLVM_T = #(ctime
+                   `(n.asm ()
+                     (Ldtoken ,t_Meta.LLVMW)
+                     (Call ,(r_mtd "System.Type" "GetTypeFromHandle" "System.RuntimeTypeHandle"))
+                     (Castclass ,t_object)));
+--------------------
+
+function %get-build-funcs()
+{
+    lst0 = %a->l(%_getmembers( LLVM_T ));
+    fe = getfuncenv();
+    build_funcs=mkhash();
+    iter lst0 do
+      if(%t_ass?(t_MethodInfo,r_GetType(lst0))) {
+          mn = %_getmtdname(lst0);
+          res = llvm_prefix("Build", mn);
+          if(car(res)) {
+              build_funcs /! cdr(res) <- shashget(fe, %Sm<<(mn));
+              n1 = %Sm<<(mn,"S");
+              c1 = shashget(fe, n1);
+              if(c1) build_funcs /! %S<<(cdr(res),"S") <- c1;
+          }
+      };
+    return build_funcs;
+}
+
+define llvm_opcodes = %get-build-funcs();
+
+---------------------------------------------------------
+#(force-class-flush)
+
+function %llvm-create-module (name) 
+  LLVM_ModuleCreateWithNameS(name)
+
+function %llvm-create-module-provider (mdl) 
+  LLVM_CreateModuleProviderForExistingModule(mdl)
+
+function %llvm-create-execution-engine (moduleprovider)
+  %_LLVMCreateExecutionEngine(moduleprovider)
+
+define %llvm-optimise = mkref(true)
+
+function %llvm-init-module(nm)
+{
+   mdl = %llvm-create-module(nm);
+   mdlprov = %llvm-create-module-provider(mdl);
+   ee = if(not(deref(llvm_no_engine)))
+          %_LLVMCreateExecutionEngine(mdlprov);
+   eetd = if(ee) LLVM_GetExecutionEngineTargetData(ee);
+
+   %_InitMCJIT(ee, mdl);
+
+   fpm = if(deref( %llvm-optimise )) {
+           bldr = LLVM_PassManagerBuilderCreate();
+           pm = LLVM_CreatePassManager();
+           fpm = LLVM_CreateFunctionPassManagerForModule(mdl);
+           if (eetd) LLVM_AddTargetData(eetd,pm);
+           LLVM_PassManagerBuilderSetOptLevel(bldr, LLVMCodeGenLevelAggressive);
+
+           LLVM_AddFunctionInliningPass(pm);
+
+           LLVM_AddCFGSimplificationPass(fpm);
+           LLVM_AddPromoteMemoryToRegisterPass(fpm);
+           LLVM_AddInstructionCombiningPass(fpm);
+           LLVM_AddEarlyCSEPass(fpm);
+           LLVM_AddTailCallEliminationPass(fpm);
+           LLVM_AddConstantPropagationPass(fpm);
+           LLVM_AddInstructionCombiningPass(fpm);
+
+           LLVM_PassManagerBuilderPopulateModulePassManager(bldr, pm);
+           LLVM_PassManagerBuilderPopulateFunctionPassManager(bldr, fpm);
+
+           LLVM_InitializeFunctionPassManager(fpm);                                                                    
+           return [bldr;pm;fpm];
+   } else [[];[];[]];
+   return [mdl; mdlprov; ee; fpm; []; mkhash()]
+}
+
+function %llvm-run-pass-manager (mdl)
+{
+   <[bld;pm;fpm]> = %llvm-mdl-fpm(mdl);
+   // if(pm) LLVM_RunPassManager(pm, %llvm-mdl(mdl));
+}
+
+function %llvm-type (tp)
+  #(type-case tp
+      (t_Int32 (LLVM_Int32Type))
+      (else (println (S<< "LLVM unsuported type: " tp))))
+
+
+function %llvm-function-type (rettype, args, vararg)
+  LLVM_FunctionType(rettype,
+                    marshal_list(args),
+                    length(args),
+                    if(vararg) 1 else 0)
+
+function %llvm-get-params (func)
+{
+   n = LLVM_CountParams(func);
+   map i in [0..n] do {
+      LLVM_GetParam(func, i);
+   }
+}
+
+
+function %llvm-add-function (mdl, name, ftype)
+ LLVM_AddFunctionS(%llvm-mdl(mdl),name,ftype)
+
+function %llvm-create-builder () LLVM_CreateBuilder()
+
+function %llvm-get-function (mdl, name)
+  LLVM_GetNamedFunctionS(%llvm-mdl(mdl), name)
+
+function %llvm-build-ret-void (bld)
+     LLVM_BuildRetVoid(bld)
+
+function %llvm-run-function (mdl, func)
+     %_LLVMRunFunction(%llvm-mdl-ee(mdl), func)
+
+function %llvm-const-int(val)
+  LLVM_ConstInt(LLVM_Int32Type(),
+		.net(val): ((System.IConvertible)val).
+                   ToInt64((System.IFormatProvider)null),1)
+
+
+function test_op(x) 
+   .net(x): System.Globalization.CultureInfo.
+              get_CurrentCulture().get_TextInfo().
+	         ToTitleCase((System.String)x)
+
+function llvm_get_opcode_s(x)
+{
+  str = %S<<(%symbol->string(x),"S");
+  ret = llvm_opcodes /@ str;
+  if(ret) ret else {println(#`(UNKNOWN STR INSTRUCTION ,x)); []}
+}
+
+
+function llvm_get_opcode(x)
+{
+  str = %symbol->string(x);
+  ret = llvm_opcodes /@ str;
+  if(ret) ret else {println(#`(UNKNOWN INSTRUCTION ,x)); []}
+}
+
+function invoke_native_func(func, args) return InvokeNativeFunction(func, length(args), marshal_list(args))
+
+function llvm_vf(pfx, vlu)
+  #(shashget (getfuncenv) (Sm<< pfx vlu))
+
+#(macro llvm_v (pfx vlu)
+    `(llvm_vf (quote ,pfx) ,vlu))
+
+
+function llvm_force_exit() []  // %_exit(0)
+///// The following does not work :(
+
+#(macro llvm_make_invoker (rtype . argtypes) ;; value types/intptrs only
+   (let ((args =pf: map a in argtypes count i do %Sm<<("aa",i)))
+     `(fun (ptr ,@args)
+        (n.asm (ptr ,@args)
+          ,@(foreach-mappend (z (reverse (zip argtypes args)))
+              (format z (t0 a) 
+	      (alet t (read-int-eval t0)
+                `(
+                  (expr ,a)
+                  (Unbox ,t)
+                 ,(_ldind t)
+                  ))))
+          (expr ptr)
+          (Unbox ,t_IntPtr)
+          (Ldind_I)
+          (Calli (,=pf: .net:  System.Runtime.InteropServices.CallingConvention.Winapi) ,(read-int-eval rtype) ,(map read-int-eval argtypes) ())
+          (Box ,(read-int-eval rtype))
+          ))))
+

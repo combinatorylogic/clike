@@ -1,0 +1,135 @@
+// N.B. : 'pfront'(...) is not even a part of the AST. But who cares?
+syntax of pfclike in cltop, start: ' "##" [atopexpr]:e '
+ { 'pfront'(e) }
+
+
+syntax of pfclike in cltop, start: ' clike macro [clqident]:nm? "{" 
+                           syntax ":" [mpeg]:r ";"?
+                           typing ":" [expr]:rs ";"?
+                           expand as ":" [expr]:e ";"?
+                       "}" '
+{   
+    code = #`(clike_maketexpander ,nm ,r ,rs ,e);
+    res = 'expr'('lisp'(code));
+    return 'pfront'(res)
+}
+
+function %_clike_make_syntax(mnm, r, ps)
+{
+   body = 
+    #`(let ,(foreach-map (p ps)
+              (format p (n t)
+	       `(,n ,(case t
+	                 ((clexpr clexpr0 ) `(list 'expr ,n))
+	                 ((cllvalue) `(list 'lvalue ,n))
+	                 ((cltype) `(list 'type ,n))
+			 ((clqident) `(list 'var ,n))
+			 ((clcode) `(list 'stmt ,n))
+			 ((expr) `(list 'verb ,n))
+	        ))))
+	 (list 'typedmacro (quote ,mnm)
+            ,@(map car ps)));
+  <mpeg(cde,rst)> = r;
+   #`(peg-minigrammar pfclike clexpr_inner
+                               ()
+                               (,cde (() (action ,body)))
+                               ,@hlevel-default-entries
+			       ,@rst
+                               )
+}
+
+function clike_makenop(v) 'NOP'
+
+function %_clike_select_gettype(t)
+  case t {
+      'clexpr' | 'clexpr0' | 'cllvalue' -> 'car'
+    | 'cltype' -> 'I'
+    | 'clqident' | 'expr' | 'clcode' -> 'clike_makenop'
+  }
+
+
+function %_clike_select_untyper(t)
+  case t {
+      'clexpr' | 'clexpr0' -> 'clike_untype_llexpr'
+    | 'cllvalue' -> 'clike_untype_lvalue'
+    | 'cltype' -> 'I'
+    | 'clcode' -> 'clike_untype_llcode'
+    | 'clqident' | 'expr'  -> 'I'
+  }
+
+function %_clike_make_rules(nm, ps, rs)
+{
+  pfcode = pfront_expr(rs);
+  #`(clike_deftrules ,nm ,(map car ps)
+        (let ,(map-over ps
+	         (fmt (n t)
+		   `(,n (,(_clike_select_gettype t) (cadr ,n)))))
+            ,pfcode))
+}
+
+function %_clike_make_expander(nm, ps, e)
+{
+  pfcode = pfront_expr(e);
+  #`(clike_deftexpander ,nm ,(map car ps)
+        (let ,(foreach-mappend (p ps)
+	         (format p (n t)
+		   `((,(Sm<< "typeof_" n) 
+		        (,(_clike_select_gettype t) (cadr ,n)))
+		     (,n (,(_clike_select_untyper t) (cadr ,n))))))
+            ,pfcode))
+}
+
+function %_clike_check_ps(ps)
+  iter ps do {
+     <[n;t]> = ps;
+      case t {
+        'clexpr' | 'clexpr0' | 'cllvalue' | 'clqident' | 'cltype' | 'expr'
+       | 'clcode' -> []
+       | else -> ccerror('CLIKE:UNSUPPORTED-MACRO-ARG-TYPE'(ps))
+      }
+  }
+
+macro clike_maketexpander (nm0,r,rs,e)
+{
+  nm = if(nm0) car(nm0) else gensym();  
+  <mpeg(re,_)> = r;
+  ps = %peg-extract-bindings(re);
+  %_clike_check_ps(ps);
+  #`(top-begin
+       ,(_clike_make_syntax nm r ps)
+       ,(_clike_make_rules nm ps rs)
+       ,(_clike_make_expander nm ps e)
+       )
+}
+
+function clike_convbindtype(env, tp, failp)
+{
+  tp1 = clike_env_unitype(env, tp);
+  match tp1 with
+    integer('i32') -> 't_Int32'
+  | integer('u32') -> 't_UInt32'
+  | ptr(_) -> 't_object'
+  | array(@_) -> 't_object'
+  | else -> failp := true
+}
+   
+function clike_makebinding(env, fndef)
+{
+  failp = mkref([]);
+  ffname = mkref("");
+  types = visit:clike(lltoplev: fndef) {
+     deep lltoplev {
+        cfunc -> {ffname := name; return args}
+      | else -> {failp := true; []}
+     };
+     deep llfuncarg: clike_convbindtype(env, tp, failp);
+  };
+  if(^failp) return #`(begin)
+  else {
+     fargs = map a in types count i do %Sm<<("a",i);
+     invcode = #`(llvm_make_invoker ,@types);
+     bindcode = #`(alet ptr (clike_get_ptr ,(S<< (deref ffname)))
+                       (fun ,fargs (,invcode ptr ,@fargs)));
+     return bindcode
+  }
+}

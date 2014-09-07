@@ -1,0 +1,78 @@
+#(usedll CLikeCore)
+
+-------------------
+
+#(macro __cl_define_dll (dllname)
+   (let* ((mdl (llvm_init_module dllname))
+	  (env (clike_global_env))
+	  (dllfile (S<< dllname  ".dll")))
+     =pf: {
+       %read-int-eval('define'('clike-current-env',#`(quote ,env)));
+       %read-int-eval('define'('clike-current-llvm-env',#`(quote ,mdl)));
+       %read-int-eval('define'(%Sm<<("Module_",dllname),
+				    #`(quote (,mdl ,env ,dllfile))))
+     }
+     `(top-begin )
+     ))
+
+#(macro __cl_save_dll (envname)
+   (format (read-int-eval (Sm<< "Module_" envname))
+           (mdl env dllname)
+      (llvm_save (S<< envname ".bc"))))
+
+#(macro __cl_embed_emit_simple (envname topcode)
+   (format (read-int-eval (Sm<< "Module_" envname))
+           (mdl env dllname)
+     (foreach (t topcode)
+         (clike_compile_ast mdl env (list t))))
+   `(top-begin ))
+
+#(macro __cl_embed_emit_wrapper (envname fname rtype argtypes code)
+   (format (read-int-eval (Sm<< "Module_" envname))
+           (mdl env dllname)
+       (clike_compile_ast mdl env (list code))
+       (let* ((cname (gensym))
+	      (invname (gensym))
+	      (argnms (foreach-map-count (a argtypes i)
+				      (Sm<< "aa" i)))
+              (wclass `(native (classname ,cname)
+			   (import ,dllname
+				   ,(S<< fname)
+				   ,@argtypes))))
+	 `(top-begin
+	    ,wclass
+	    ; Override the definition in compilation-time mode
+;	    (force-class-flush)
+;	    (define ,invname (llvm_make_invoker ,rtype ,@argtypes))
+	    (force-class-flush)
+	    (ctimex
+	     (define ,fname (fun ,argnms
+			      ;(,invname (clike_get_ptr ,(S<< fname))
+			      ;    ,@argnms)
+			      (invoke_native_func (clike_get_ptr ,(S<< fname))
+						  (list ,@argnms))
+			      )))))))
+
+---------------------------------------
+
+syntax in top, start (pfclike): '".TC" "(" [qident]:nm ")" ":" [cltop]:t'
+{
+   #`(expr (lisp (__cl_embed_emit_simple ,nm (,t))))
+}
+
+syntax in top, start (pfclike): '".TCDEF" "(" [qident]:nm ")" ":" [ioptop]:t'
+ + {
+      ioptop := 
+        [ioptype]:ret [clqident]:name "(" ecslist<[ioparg],",">:args ")"
+          "{" eslist<[clcode]>:es "}" => iopfun(ret,name,args,es);
+      ioparg := [ioptype]:t [clqident]:name => arg(t,name);
+      ioptype := { "intptr_t" => intptr() }
+              /  { "int" => int() }
+              /  { "float" => float() }
+              ;
+ }
+{
+  // TODO
+  []
+}
+    

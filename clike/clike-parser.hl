@@ -1,0 +1,427 @@
+%literate:
+
+\section{Parser}
+
+\phcode{include "clike-parser-utils.hl";}
+
+This is a default clike parser, which produces an initial AST.
+
+It is in many ways different from the original C language --- it is designed
+with extensibility in mind, and it contains a number of additional keywords
+for marking specific parsing entries inside a quasiquotation syntax.
+
+\pfcode{
+parser pfclike ( pfront ) {
+  ///\commentbox{Main parser entry}\\
+  pfclike := [cltop]:x [Spaces]* => x;
+
+  ///\commentbox{A global ignorance rule: omit all the occurences of the ``Spaces'' regular expression in front of all the tokens (lexical, keyword and named)}\\
+  !!Spaces;
+
+  ///\commentbox{Standard tokens rules, useful for syntax highlighting}\\
+  [lexical:] := [lexical] => {ctoken = lexic};
+  [keyword:] := [keyword] ![IdentRest] => {ctoken = keyword};///\footnote{Avoid parsing {\tt ifabc} as {\tt if} $+$ identifier {\tt abc}}\\
+
+  ///\commentbox{Floating point numbers regular expression}\\
+  @@rcldouble := ("-"/"+")? [Digit]+ 
+              ((("." [Digit]+)?
+                  ("e"/"E") ("-"/"+")? [Digit]+)
+              / ("." [Digit]+)
+                  );
+  
+  @tkcldouble := [rcldouble] => {ctoken = const};
+
+  cldouble := [tkcldouble]:v => $sval(v);
+
+  ///\commentbox{Keywords that should not be parsed as identifiers; Some keywords are clike--specific, some came from C.}\\
+  @@clkeywordI := "break"/"null"/"NULL"/"case"/"switch"/"if"/"else"/"for"/"do"/
+                  "switch"/"type"/"code"/"return"/"default"/
+                  "expr"/"top"/"typedef"/"extern"/"inblock"/
+                  "void"/"float"/"double"/"struct"/"sizeof"/"var"/"lift"/
+		  "__stdcall"/"__llvm"
+		  ;
+ 
+  ///\commentbox{A regular expression for identifiers}\\
+  @@clidenti := ("_"/[Letter]) [IdentRest]*;
+
+  @@clkeyword := [clkeywordI] ![IdentRest];
+
+  @clidenttk := ![clkeyword] [clidenti];
+
+  clident := [clidenttk]:v => {ctoken=ident} $sval(v);
+
+  clqident := { "\" [clident]:i "\" => {qstate = unquote} unquote(i) }  
+           /  [clident]
+           ;
+
+  ///\commentbox{A regular expression for Char literals}\\
+  @clchart := [QUOTE] . [QUOTE] => {ctoken=lexic};
+  clchar := [clchart]:c => $charcode($stripval(c));
+
+  ///\commentbox{Top--level entries (typedefs, function definitions and declarations, etc.)}\\
+  cltopatom := [cltop_start]///\footnote{This is one of the extension points}\\
+         / {typedef [cltype]:t [clqident]:nm ";" => 
+               {mode=top} typedef($source(), t, nm) }
+         / {extern? [clfuncsignature]:sig ";" => 
+               {mode=top} efunc($source(), @sig) }
+         / {extern? [clcleanfuncsignature]:sig ";" => sig }
+         / {[clfuncsignature]:sig "{" eslist<[clcode]>:es "}" => 
+               {mode=top} cfunc($source(), @sig,begin(@es)) }
+         / {extern [clglob]:g ";" => {mode=top} eglobal($source(), @g) }
+         / {[clglob]:g ";" => {mode=top} global($source(), @g) }
+         / [cltop_inner]
+         / {"{" eslist<[cltop]>:x "}" ";"? => begin(@x) }///\footnote{One of the notable differences from C --- toplevel statements can be grouped inside curly braces.}\\
+         / { top "\" [clident]:i "\" ";" => {qstate = unquote} unquote(i) }
+	 ;
+
+  ///\commentbox{Compound top--level entries}
+  cltop := [cltopatom]
+         / {"#" [clqident]:nm "(" ecslist<[clmcarg],",">:args ")" ";" => 
+              macroapp(nm,@args) }///\footnote{A clike macro application}\\
+/// \commentbox{The following rule needs a more elaborate explanation. Here and throughout the rest of the parser we're using parser entry keywords (like {\tt top}) to specify entries we're substitutiong inside a quasiquotation syntax.}\\
+         / { ";" => begin() }
+         ;
+
+  ///\commentbox{A helper term for detecting vararg function declarations}\\
+  clfuncsigva := { "," "..." => `true }
+              /  { !"," => $nil() }
+	      ;
+
+/// \commentbox{Some calling conventions attributes, but we're not going to support the whole list here.}\\
+  clcallconv := {"__stdcall" => stdcall()}
+              / {"__llvm" => llvm()}
+	      ;
+
+  ///\commentbox{A function type parser}\\
+  clfuncsignature := [clcallconv]:cc? [cltype]:t [clqident]:name "(" 
+                         ecslist<[clsigarg],",">:args
+                         [clfuncsigva]:va ")" => 
+                     $cdr(f(cc,t,name,va,args));
+
+  clcleanfuncsignature := [clcallconv]:cc?  [cltype]:t [clqident]:name "("
+                         ecslist<[cltype1],",">:args [clfuncsigva]:va
+                         ")" => {mode=top} efunc($source(), cc,t,name,va,args);
+
+  cltype1 := [cltype]:t => $list(t,v(`non));
+
+  clsigarg := [cltypebase]:t [clvarname]:name => $cdr(g(t,name));
+
+  clglob := [cltypebase]:t [clvarname]:name => $cdr(g(t,name));
+
+  ///\commentbox{A macro argument parser, it is not quite C--ish}\\
+  clmcarg := 
+           { type [cltype]:t => type(t) }
+         / { code [clcode]:c => stmt(c) }
+         / { expr [clexpr]:e => stmt(expr(e)) }
+         / { top [cltop]:t => top(t) }
+         / { "=pf" ":" [atopexpr]:e => verb(e) } /* fall back to pfront */
+         / { "\" [clident]:i "\" => {qstate = unquote} unquote(i) }
+         / { [cltop]:t => top(t) }
+         / { [clcode]:c => stmt(c) }
+         / { [clexpr0]:e => stmt(expr(e)) }
+         ;
+
+  ///\commentbox{Data types declarations}\\
+  cltype :=
+            { [cltypeattr]:ta [cltype]:t => attr(ta,t) }
+         /  { [cltype]:t "*" => ptr(t) }
+         /  { [cltype]:t "(" ecslist<[cltype],",">:args ")" => fun(t, $nil(), @args) }
+         /  { [cltype]:t "[" "]" => ptr(t) }
+         /  { [cltype]:t "[" [number]:n "]" => array(t,n) }
+         /  [cltypebase]
+         ;
+
+  cltypeattr :=
+            { addrspace [number]:n => addrspace(n) }
+         /  { const => a(`const) }
+         ;
+
+  clvarname := [clvarnamex]:v => p(v);
+
+  clvarnamex :=
+            { [clvarnamex]:t "[" "]" => ptr(t) }
+         /  { [clvarnamex]:t "[" [number]:n "]" => array(t,n) }
+         /  { "(" "*" [clvarnamex]:t ")" "(" ecslist<[cltype],",">:args ")" => 
+              ptr(fun(t,$nil(),@args)) }///\footnote{A special case: function pointer application}\\
+         /  [clvarnameatom];
+
+  clvarnameatom :=
+            { "*" [clvarnamex]:t => ptr(t) }
+         /  { [clqident]:nm => v(nm) }
+         ;
+
+  cltypebase :=
+            { "::type" "\" [clident]:i "\" => {qstate = unquote} unquote(i) }
+         /  { "\" [clident]:i "\" => {qstate = unquote} unquote(i) }
+         /  [cltype_start]
+         /  { "int32" => integer(`i32) }
+         /  { "int8"  => integer(`i8)  }
+         /  { "int16"  => integer(`i16)  }
+         /  { "int64"  => integer(`i64)  }
+
+         /  { "uint32"  => integer(`u32)  }
+         /  { "uint8"  => integer(`u8)  }
+         /  { "uint16"  => integer(`u16)  }
+         /  { "uint64"  => integer(`u64)  }
+
+         /  { "void"    => void() }
+         /  { "float"   => real(`float) }
+         /  { "double"   => real(`double) }
+         /  { struct [clqident]:selfname? "{" slist<[clstrelt]>:elts "}" =>
+                    macrostruct(selfname,@elts) }
+         /  { struct [clqident]:selfname =>
+                    structalias(selfname) }
+         /  [cltype_inner]
+         /  { [clqident]:id => alias(id) }       
+         ;
+
+  clstrelt := { [cltypebase]:t [clvarname]:nm ";" => $list(t,nm) }
+           ;
+
+  clivpair := { [clvarname]:nm "=" [clexpr0]:e => d(nm,e) }
+           /  { [clvarname]:nm => s(nm) }
+           ;
+
+  clswitchelt := case [clconst]:c ":"  eslist<[clcode]>:bd =>
+                     $list(c, begin(@bd));
+
+  clsdefault := default ":" eslist<[clcode]>:bd => begin(@bd);
+
+  ///\commentbox{Function body: statements}\\
+  clcode :=
+            { "{" eslist<[clcode]>:es "}" => begin(@es) }
+         /  [clcode_start]
+         /  { lift "{" [cltop]:t ";"? "}" => toplift(t) }
+         /  { if "(" [clexpr]:cnd ")" [clcode]:tr else [clcode]:fl
+               => {mode=stmt} if3($source(), cnd, tr, fl) }
+         /  { if "(" [clexpr]:cnd ")" [clcode]:tr => 
+              {mode=stmt} if2($source(), cnd, tr) }
+         /  { while "(" [clexpr]:cnd ")" [clcode]:body => 
+              {mode=stmt} while($source(), cnd, body) }
+         /  { do [clcode]:body while "(" [clexpr]:cnd ")" => 
+              {mode=stmt} do($source(), body, cnd) }
+         /  { for "(" ([clfor1]:f1)? ";" ecslist<[clexpr0],",">:f2 ";"
+                      ecslist<[clexpr0],",">:f3 ")" [clcode]:body =>
+                 {mode=stmt} protofor($source(), f1,f2,f3,body) }
+         /  {"#" [clqident]:nm "(" ecslist<[clmcarg],",">:args ")" ";" => 
+              {mode=stmt} macroapp($source(), nm,@args) }
+         /  { goto [clqident]:id ";" => {mode=stmt} goto($source(),id) }
+         /  { break ";" => {mode=stmt} break($source()) }
+         /  { return [clexpr]:e ";" => {mode=stmt} return($source(),e) }
+         /  { return ";" => {mode=stmt} vreturn($source()) }
+         /  { switch "(" [clexpr]:e ")" "{" slist<[clswitchelt]>:elts
+               [clsdefault]:dflt? "}" =>
+                  {mode=stmt} switch($source(), e,elts,dflt) }
+         /  [clcode_inner]
+         /  { [clqident]:id ":" => {mode=stmt} label($source(), id) }
+         /  { [cltypebase]:tp cslist<[clivpair],",">:vars ";" => 
+              manyvardefs(tp,@vars) }
+         /  { var [clqident]:l "=" [clexpr]:r ";" => varinit(l,r) }
+         /  { [cllvalue]:l "=" [clexpr]:r ";" => 
+              {mode=stmt} set($source(),l,r) }
+         /  { "::code" "\" [clident]:i "\" => {qstate = unquote} unquote(i) }
+         /  { "\" [clident]:i "\" => {qstate = unquote} unquote(i) }
+         /  { [clexpr]:e ";" => expr(e) }
+         /  { ";" => begin() }
+         ;
+
+  clfor1 := {[clfor0]:a "," cslist<[clfor0],",">:b => begin(a,@b) }
+         /  [clfor0]
+         ;
+
+  clfor0 := { [cltypebase]:tp cslist<[clivpair],",">:vars =>
+                 manyvardefs(tp,@vars) }
+         /  { [clexpr0]:e => expr(e) }
+         ;
+
+  ///\commentbox{Function body: expressions}\\
+  clexpr := {"::comma" [clexpr0]:a "," cslist<[clexpr0],",">:b => 
+             {mode=expr} commaexprs($source(), a,@b) }
+         /  [clexpr0]
+         ;
+
+  clexpr0 := [classexpr] / [cltriexpr] ;
+
+  classexpr := 
+               { [cllvalue]:l "=" [clexpr]:r => 
+	         {mode=expr} eset($source(),l,r) }///\footnote{Assignment is an expression rather than a statement, as it yields a value in C}\\
+            /  { [cllvalue]:l "+=" [clexpr]:r => 
+	         {mode=expr} modop($source(),`add,l,r) }
+            /  { [cllvalue]:l "-=" [clexpr]:r => 
+	         {mode=expr} modop($source(),`sub,l,r) }
+            /  { [cllvalue]:l "*=" [clexpr]:r => 
+	         {mode=expr} modop($source(),`mul,l,r) }
+            /  { [cllvalue]:l "/=" [clexpr]:r => 
+	         {mode=expr} modop($source(),`div,l,r) }
+            /  { [cllvalue]:l "%=" [clexpr]:r => 
+	         {mode=expr} modop($source(),`rem,l,r) }
+            /  { [cllvalue]:l "<<=" [clexpr]:r => 
+	         {mode=expr} modop($source(),`shl,l,r) }
+            /  { [cllvalue]:l ">>=" [clexpr]:r => 
+	         {mode=expr} modop($source(),`shr,l,r) }
+            /  { [cllvalue]:l "&&=" [clexpr]:r => 
+	         {mode=expr} modop($source(),`logand,l,r) }
+            /  { [cllvalue]:l "||=" [clexpr]:r => 
+	         {mode=expr} modop($source(),`logor,l,r) }
+            /  { [cllvalue]:l "&=" [clexpr]:r => 
+	         {mode=expr} modop($source(),`and,l,r) }
+            /  { [cllvalue]:l "|=" [clexpr]:r => 
+	         {mode=expr} modop($source(),`or,l,r) }
+            /  { [cllvalue]:l "^=" [clexpr]:r => 
+	         {mode=expr} modop($source(),`xor,l,r) }
+            /  { [classexpr_inner]:a => a }
+            ;
+
+  cltriexpr := { [clbinexpr]:cnd "?" [clexpr]:tr ":" [clexpr]:fl =>
+                    tri ... }///\footnote{A ternary expression}\\
+            /  [clbinexpr]
+            ;
+
+  binary clbinexpr :=
+               (100) [clbinexpr] "||" [clbinexpr] =>
+                    {mode=expr} logor($source(), L,R)
+            |  (100) [clbinexpr] "|"  [clbinexpr] =>
+   	            {mode=expr} bin($source(),`or,L,R)
+            |  (100) [clbinexpr] "^"  [clbinexpr] =>
+ 	            {mode=expr} bin($source(),`xor,L,R)
+
+            |  (200) [clbinexpr] "&&" [clbinexpr] =>
+                    {mode=expr} logand($source(), L,R)
+            |  (200) [clbinexpr] "&"  [clbinexpr] =>
+	            {mode=expr} bin($source(),`and,L,R)
+
+            |  (300) [clbinexpr] "==" [clbinexpr] =>
+                    {mode=expr} compop($source(),`eq,L,R)
+            |  (300) [clbinexpr] "!=" [clbinexpr] =>
+	        {mode=expr} compop($source(),`ne,L,R)
+
+            |  (600) [clbinexpr] "*" [clbinexpr] =>
+                 {mode=expr} bin($source(),`mul,L,R)
+            |  (600) [clbinexpr] "/" [clbinexpr] =>
+	         {mode=expr} bin($source(),`div,L,R)
+            |  (600) [clbinexpr] "%" [clbinexpr] =>
+	         {mode=expr} bin($source(),`rem,L,R)
+            |  (600) [clbinexpr] "<<" [clbinexpr] =>
+	         {mode=expr} bin($source(),`shl,L,R)
+            |  (600) [clbinexpr] ">>" [clbinexpr] =>
+	         {mode=expr} bin($source(),`shr,L,R)
+
+
+            |  (400) [clbinexpr] "<=" [clbinexpr] =>
+                 {mode=expr} compop($source(),`le,L,R)
+            |  (400) [clbinexpr] "<" [clbinexpr] =>
+	         {mode=expr} compop($source(),`lt,L,R)
+            |  (400) [clbinexpr] ">=" [clbinexpr] =>
+	         {mode=expr} compop($source(),`ge,L,R)
+            |  (400) [clbinexpr] ">" [clbinexpr] =>
+	         {mode=expr} compop($source(),`gt,L,R)
+
+            |  (500) [clbinexpr] "+" [clbinexpr] =>
+                 {mode=expr} bin($source(),`add,L,R)
+            |  (500) [clbinexpr] "-" [clbinexpr] =>
+	         {mode=expr} bin($source(),`sub,L,R)
+
+            | [clunexpr]
+	    ;
+
+  clunexpr := { "-" [clprimexpr]:p => un(`minus,p) }
+            / { "++" [cllvalue]:p => pre(`inc,p) }
+            / { "--" [cllvalue]:p => pre(`dec,p) }
+            / { "!" [clprimexpr]:p => un(`not,p) }
+            / [clunexpr_inner]
+            / [clpostexpr]
+            ;
+
+  clpostexpr := { [cllvalue]:e "++" => post(`inc, e) }
+            /   { [cllvalue]:e "--" => post(`dec, e) }
+            /   [clpostexpr_inner]
+            /   [clprimexpr]
+            ;
+
+  ///\commentbox{A left--recursive expression syntax core:}\\
+  clprimexpr := 
+                { [clprimexpr]:e "[" [clexpr]:idx "]" => array(e,idx) }
+            /   { [clprimexpr]:e "." [clqident]:fld => getelt(e, fld) }
+            /   { [clprimexpr]:e "->" [clqident]:fld => getelt(deref(e),fld) }
+	    /   [clprimexpr_inner]	
+            /   [clprimexpratom]
+            ;
+
+  clprimexpratom :=
+                { "__stdcall" [clqident]:fn "(" ecslist<[clexpr0],",">:args ")" =>
+                   {mode=expr} stdcallpfx(call($source(),fn,@args)) }
+            /   { "__stdcall" [cllvalue]:fn "(" ecslist<[clexpr0],",">:args ")"
+                    => {mode=expr} stdcallpfx(callptr($source(), fn,@args)) }
+            /   { [clqident]:fn "(" ecslist<[clexpr0],",">:args ")" =>
+                    {mode=expr} call($source(), fn,@args) }
+            /   { [cllvalue]:fn "(" ecslist<[clexpr0],",">:args ")"
+                    => {mode=expr} callptr($source(), fn,@args) }
+            /   [clprimexpratom_inner]
+            /   [clatomexpr]
+            ;
+
+  ///\commentbox{And a very similar l--value left--recursive syntax: we want to destinguish l--values from all the other epxressions on a syntax level}\\
+  cllvalue := 
+                { [cllvalue]:e "[" [clexpr]:idx "]" => array(e,idx) }
+            /   { [cllvalue]:e "." [clqident]:fld => getelt(e, fld) }
+            /   { [cllvalue]:e "->" [clqident]:fld => getelt(deref(e),fld) }
+            /   [cllvalueatom]
+            ;
+
+  cllvalueatom :=   { "(" [cllvalue]:v ")" => v }
+            /   { "*" [clatomexpr]:e => deref(e) }
+            /   { "::lvalue" "\" [clident]:i "\" => {qstate = unquote} unquote(i) }
+            /   { "::lvar" "\" [clident]:i "\" => {qstate = unquote} var(unquote(i)) }
+            /   { [clqident]:id => var(id) }
+            ;
+
+  ///\commentbox{Atom expressions --- please note that {\tt ::expr} entry is defined here, not at the expression entry node}\\
+  clatomexpr :=
+                { "(" [cltype]:t ")" [clexpr]:e => typecast(t,e) }
+            /   { "(" [clexpr]:e ")" => e }
+            /   { inblock "{" eslist<[clcode]>:es "}" => 
+                  {mode = expr} protoinblock($source(),@es) }
+            /   { "&" [clatomexpr]:e => ref(e) }
+            /   { "*" [clatomexpr]:e => deref(e) }
+            /   { "#" [clqident]:nm "(" ecslist<[clmcarg],",">:args ")" => 
+                    macroapp(nm,@args) }
+            /   { "::expr" "\" [clident]:i "\" => {qstate = unquote} unquote(i) }
+            /   { "\" [clident]:i "\" => {qstate = unquote} unquote(i) }
+            /   [clexpr_inner]
+            /   { [clconst]:c => const(c) }
+            /   { sizeof "(" [cltype]:t ")" => sizeof(t) }
+            /   { [clqident]:id => var(id) }
+            /   { "::var" "\" [clident]:i "\" => {qstate = unquote} var(unquote(i)) }
+            ;
+
+  ///\commentbox{Constant literals}\\
+  clconst := 
+              { [cldouble]:d => real(`double, d) }///\footnote{Doubles are stored in AST in their string form}\\
+            / { [number]:n => integer(`i32, n) }
+            / { [hexnumber]:n => integer(`i32, n) }
+            / { [clchar]:c => integer(`i8, c) }
+            / { [string]:s => string(s) }
+            / { null => null() }
+            / { NULL => null() }
+            / [clconst_inner]
+	    / [clconstcompound]
+            ;
+
+  ///\commentbox{Compound literals (no vectors yet, sorry)}\\
+  clconstcompound :=
+              { "[" cslist<[clconst],",">:cc ","? "]" => constarray(@cc) }
+	    / { [cltype]:tp "{" ecslist<[clconstfield],";">:flds ";"? "}" =>
+                    conststruct(tp,@flds) }
+	    ;
+  clconstfield := 
+               [clqident]:nm "=" [clconst]:vl => $list(nm,vl);
+	    
+  ///\commentbox{Extension entry points:}\\
+  &cltop_start; &cltop_inner; &cltype_start; &cltype_inner;
+  &clcode_start; &clcode_inner; &clprimexpr_inner; &clprimexpratom_inner;
+  &classexpr_inner;
+  &clunexpr_inner;
+  &clpostexpr_inner; &clexpr_inner; &clconst_inner;
+}
+
+}

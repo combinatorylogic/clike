@@ -1,0 +1,291 @@
+%literate: 
+
+\section{Utility functions for the typing pass}
+
+\pfcode{
+
+// Strip from qualifiers
+function clike_unqualify(tp)
+  visit:clike(lltype:tp) {deep lltype {
+     qual -> t
+   | else -> node
+  }}
+
+// Check if a type is a structure
+function clike_isstruct(x)
+  match x with
+     'struct'([nm],@_) -> nm
+   | 'structalias'(nm) -> nm
+   | 'structref'(nm) -> nm
+   | else -> []
+
+// Convert a type into a canonical form
+function clike_type_canonical(t)
+  visit:clike(lltype: clike_unqualify(t)) {deep lltype {
+     struct -> {if(nm) 'structalias'(car(nm)) else node}
+   | array -> 'ptr'(t)
+   | else -> node
+  }}
+
+// Get s string representation of a type
+function clike_type_string(t)
+  %to-string(clike_type_canonical(t))
+
+// Check if two types are identical
+function clike_type_iso(a, b)
+ do loop(t1=a, t2=b) {
+   match t1:t2 with
+      'integer'(t1):'integer'(t2) -> %eqv?(t1,t2)
+    | 'ptr'(a):'ptr'(b) -> loop(a,b)
+    | 'ptr'(a):'array'(b,@r1) -> loop(a,b)
+    | 'array'(a,@r):'ptr'(b) -> loop(a,b)
+    | 'array'(a,@r):'array'(b,@r1) -> and(loop(a,b),iso(r,r1))
+    | x:y -> {
+        s1 = clike_isstruct(x);s2=clike_isstruct(y);
+        if(and(s1,s2)) %eqv?(s1,s2) else iso(x,y)
+      }}
+
+// Check if an integer is of a signed kind
+function clike_signed_int(itype)
+  case itype {
+     'i8'|'i16'|'i32'|'i64' -> true
+   | 'u8'|'u16'|'u32'|'u64' -> nil
+   | else -> ccerror('CLIKE:INCORRECT-INTEGER-SPEC'(itype))
+  }
+
+// Check if a type is signed, if this notion applies
+function clike_signed(tp)
+   visit:clike(lltype: tp) {once lltype {
+       integer -> clike_signed_int(itype)
+     | real -> true
+     | ptr -> nil
+     | array -> nil
+     | string -> nil
+     | else -> ccerror('CLIKE:INCORRECT-TYPE'(tp))
+   }}
+
+// A representation for C strings
+define clike_string_type = 'ptr'('integer'('i8'));
+
+// A helper function which detects a type of a given constant literal
+function clike_const_type(c)
+ visit:clike(llconst:c) {
+    deep llconst {
+       null -> 'null'()
+     | integer -> 'integer'(itype)
+     | real -> 'real'(rtype)
+     | string -> clike_string_type
+     | constarray -> 'array'(caar(elts)) // this is why it is deep
+     | conststruct -> t
+    }}
+
+// A helper function which returns an array element type
+function clike_array_elt_type(tp)
+ match tp with
+    ptr(array(t,@x)) -> t
+  | ptr(ptr(t)) -> t
+  | arg(array(t,@x)) -> t
+  | arg(ptr(t)) -> t
+  | else -> ccerror('CLIKE:ARRAY-TYPE'(tp))
+
+// A helper function which makes a reference type for a given type
+function clike_make_ref_type(tp)
+ return 'ptr'(tp)
+
+// A helper function which returns a type referenced by a given reference type
+function clike_deref_type(tp)
+  match tp with
+    ptr(e) -> e
+  | else -> ccerror('CLIKE:DEREF-TYPE'(tp))
+
+function clike_getstruct(tp)
+  match tp with
+     ptr(e) -> e
+  |  else -> tp
+
+// A helper function which gives a type of a named structure field
+function clike_fieldtype(tp, fldnm)
+  match clike_getstruct(tp) with
+     struct(nm,@elts) -> {
+          v = filter(fun(x) %eqv?(car(x),fldnm), elts);
+          if(v) cadr(car(v)) else 
+             ccerror('CLIKE:STRUCT-NO-SUCH-FIELD'(tp, fldnm))}
+   | else -> ccerror('CLIKE:STRUCT-TYPE'(tp))
+
+// Returns a number of a field
+function clike_fieldnumber(tp, fldnm)
+  match clike_getstruct(tp) with
+     struct(nm,@elts) ->
+          do loop(es = elts, i = 0)
+          {
+             match es with
+                [nm;tp]:rest -> {
+                   if(%eqv?(nm, fldnm)) i
+                   else loop(rest,i+1)
+                }
+              | else -> ccerror('CLIKE:STRUCT-NO-SUCH-FIELD'(tp, fldnm))
+          }
+   | else -> ccerror('CLIKE:STRUCT-TYPE'(tp))
+
+// Make a typed node with a binary expression, give it a type of a first
+//  argument.
+function clike_binopsimple(LOC,op,l,r)
+  return car(l):'bin'(LOC,op,l,r)
+
+function clike_modopsimple(LOC,op,l,r)
+  return clike_deref_type(car(l)):'modop'(LOC,op,l,r)
+
+// Cast one type to another.
+// In LLVM, array of a fixed size and a pointer are different
+function clike_castto(t,n)
+   match t:car(n) with
+      ptr(t1):null() -> t:'const'('null'())
+    | ptr(t1):array(t2,@_) -> 
+        if(clike_type_iso(t1,t2)) 
+           t:'ref'(t:'array'('ptr'(car(n)):cdr(n),
+                      ['nop']:'const'('integer'('i32',0))))
+        else return t:'typecast'(t,n)
+    | else -> return t:'typecast'(t,n)
+
+// Adjust an integer to the size of a pointer type
+function clike_ptrarith(LOC,op, ptr, i)
+{
+  <itp:iv> = i;
+  <ptp:p>  = ptr;
+   if(not(%eqv?(op,'add'))) ccerror(#`(POINTER OP NOT SUPPORTED));
+   'ref'(ptp:'array'('ptr'(ptp):p,i))
+}
+
+// Adjust an integer to the size of a pointer type
+function clike_ptrarithMOD(LOC,op, ptr, i)
+{
+  <itp:iv> = i;
+  <ptp:p>  = ptr;
+   pitp = clike_deref_type(ptp);
+   if(not(%eqv?(op,'add'))) ccerror(#`(POINTER OP NOT SUPPORTED));
+   'eset'([], ptr, pitp:'ref'(clike_deref_type(pitp):'array'(ptr,i)))
+}
+
+function clike_rank(i)
+ case i {
+   'i8' -> 1 | 'u8' -> 2 | 'i16' -> 3 | 'u16' -> 4 
+  | 'i32' -> 5 | 'u32' -> 6 | 'i64' -> 7 | 'u64' -> 8
+ }
+
+// Calculate the binary operation type, inject implicit casts if needed
+function clike_fix_binoptypes(LOC, op, l,r)
+{
+   tl = clike_unqualify(car(l));tr = clike_unqualify(car(r));
+   match tl:tr with
+      integer(i1):integer(i2) -> 
+        if(%eqv?(i1,i2)) clike_binopsimple(LOC,op,l,r)
+        else {
+          if(%>=(clike_rank(i1),clike_rank(i2)))
+            tl : 'bin'(LOC,op,l,clike_castto(tl,r))
+          else
+            tr : 'bin'(LOC,op,clike_castto(tr,l),r)
+        }
+   |  integer(i1):real(r2) -> tr:'bin'(LOC,op,clike_castto(tr,l),r)
+   |  real(r1):integer(i2) -> tl:'bin'(LOC,op,l,clike_castto(tl,r))
+   |  real('float'):real('double') -> tr:'bin'(LOC,op,clike_castto(tr,l),r)
+   |  real('double'):real('float') -> tl:'bin'(LOC,op,l,clike_castto(tl,r))
+   |  ptr(t1):integer(i2) -> tl:clike_ptrarith(LOC,op,l,r)
+   |  integer(t1):ptr(t2) -> tr:clike_ptrarith(LOC,op,r,l)
+   |  else -> clike_binopsimple(LOC,op,l,r)
+}
+
+// Calculate the binary mod operation type, inject implicit casts if needed
+function clike_fix_modoptypes(LOC, op, l,r)
+{
+   tl = clike_deref_type(clike_unqualify(car(l)));tr = clike_unqualify(car(r));
+   match tl:tr with
+      integer(i1):integer(i2) -> if(%eqv?(i1,i2)) clike_modopsimple(LOC,op,l,r)
+        else tl : 'modop'(LOC, op, l, clike_castto(tl,r))
+   |  integer(i1):real(r2) -> tl:'modop'(LOC,op,l,clike_castto(tl,r))
+   |  real(r1):integer(i2) -> tl:'modop'(LOC,op,l,clike_castto(tl,r))
+   |  real('float'):real('double') -> tl:'bin'(LOC,op,l,clike_castto(tl,r))
+   |  real('double'):real('float') -> tl:'bin'(LOC,op,l,clike_castto(tl,r))
+   |  ptr(t1):integer(i2) -> tl:clike_ptrarithMOD(LOC,op,l,r)
+   |  integer(t1):ptr(t2) -> tr:clike_ptrarithMOD(LOC,op,r,l) 
+         /////{\bf TODO: report error}\\
+   |  else -> clike_modopsimple(LOC,op,l,r)
+}
+
+
+// Construct a comparision operation node
+function clike_compopsimple(LOC,op,l,r)
+  return 'compop'(LOC,op,l,r)
+
+// Fix the comparision operation arguments, if needed
+function clike_fix_compoptypes(LOC,op,l,r)
+{
+   tl = clike_unqualify(car(l));tr = clike_unqualify(car(r));
+   match tl:tr with
+      integer(i1):integer(i2) -> 
+        if(%eqv?(i1,i2)) clike_compopsimple(LOC,op,l,r)
+        else {
+          cparses(s) = %S->N(%S<<(cdr(%symbol->list(s))));
+          n1 = cparses(i1);n2=cparses(i2);
+          if(n1>n2) 'compop'(LOC,op,l,clike_castto(tl,r))
+              else 'compop'(LOC,op,clike_castto(tr,l),r)
+        }
+   |  integer(i1):real(r2) -> 'compop'(LOC,op,clike_castto(tr,l),r)
+   |  real(r1):integer(i2) -> 'compop'(LOC,op,l,clike_castto(tl,r))
+   |  real('float'):real('double') -> 'compop'(LOC,op,clike_castto(tr,l),r)
+   |  real('double'):real('float') -> 'compop'(LOC,op,l,clike_castto(tl,r))
+   |  ptr(t1):integer(i2) -> 'compop'(LOC,op,l,r)
+   |  ptr(t1):null() -> 'compop'(LOC,op,l,'ptr'(t1):'const'('null'()))
+   |  null():ptr(t1) -> 'compop'(LOC,op,'ptr'(t1):'const'('null'()),r)
+   |  integer(t1):ptr(t2) -> 'compop'(LOC,op,l,r)
+   |  else -> clike_compopsimple(LOC,op,l,r)
+}
+
+// Inject a cast into a right side of a set operation, if needed
+function clike_fix_settype(set,loc,l,r)
+ {
+   lt = clike_deref_type(clike_unqualify(car(l)));
+   rt = car(r);
+   if(clike_type_iso(lt,rt)) [set;loc;l;r]
+     else
+     match lt:rt with
+       ptr(t1):null() -> [set;loc;l;'ptr'(t1):'const'('null'())]
+     | else -> [set;loc;l;clike_castto(lt,r)]
+ }
+
+// Inject casts into function arguments, if needed
+function clike_fix_funcall(call,LOC,fn, va, args, atps)
+{
+   %__lcut(l1,l2) = do loop(a=l1,b=l2) if(a) loop(cdr(a),cdr(b)) else b;
+   [call;LOC;fn;@map az in zip(args,atps) do {
+               <[a; tt]> = az; at=clike_unqualify(car(a));
+                if(clike_type_iso(at,tt))
+                       return a
+                  else return clike_castto(tt,a);
+              };
+    @if(va) %__lcut(atps,args) else []
+   ]
+}
+
+// A shortcut for building a zero comparision operation
+function clike_notzero(e0)
+{
+  <tp:e> = e0;
+   'compop'([],'ne',e0,tp:'const'('zero'(tp)))
+}
+
+// Fix boolean expressions - compare to zero if a value is not a
+//   boolean already
+function clike_fix_bool(e)
+   match clike_unqualify(car(e)) with
+      bool() -> e
+    | else -> 'bool'() : clike_notzero(e)
+
+
+function clike_decay(tp)
+   visit:clike(lltype: tp) {
+      once lltype {
+         array -> 'ptr'(t)
+       | else -> node
+      }
+   }
+}

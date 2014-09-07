@@ -1,0 +1,336 @@
+
+function make_statement(bld,nm) 
+   fun(op, args) { args = [bld;@args;nm];
+                   fn = llvm_get_opcode_s(op);
+                   return apply(fn, args) }
+
+function unzip(lst)
+{
+	return cons(map(car,lst), map(cdr,lst));
+} 
+
+function i32toi64(val) { .net(val): (((System.IConvertible)val).ToInt64((System.IFormatProvider)null)); }
+
+function integer_type(type)
+ case type {
+    'i32'|'int32' -> LLVM_Int32Type()
+  | 'i16'|'int16' -> LLVM_Int16Type()
+  | 'i8'|'int8' -> LLVM_Int8Type()
+  | 'i64'|'int64' -> LLVM_Int64Type()
+  | else -> LLVM_Int32Type()
+ }
+
+function real_type(type)
+ case type {
+    'float'|'f' -> LLVM_FloatType()
+  | 'double'|'d' -> LLVM_DoubleType()
+  | else -> LLVM_FloatType()
+ }
+
+function llvm_get_or_create_struct(mdl, ph, nm)
+{
+  chk = ph /@ nm;
+  if(chk) chk else {
+     tp = LLVM_StructCreateNamedS(LLVM_GetGlobalContext(), nm);
+     ph/!nm <- tp;
+     return tp
+  }
+}
+
+function llvm_make_struct_type(mdl,ph,nm0,elts,pckp)
+{
+    nch = %llvm-mdl-ph(mdl);
+    nm = if(nm0) %S<<(nm0) else [];
+    nchk = if(nm) nch/@nm;
+    if(nchk) {
+     if(LLVM_IsOpaqueStruct(nchk)!=0) {
+        LLVM_StructSetBody(nchk, marshal_list(elts), length(elts), pckp);
+     };
+     return nchk 
+    } else 
+    {
+     tp = if(nm) llvm_get_or_create_struct(mdl, ph, nm)
+         else LLVM_StructType(marshal_list(elts), length(elts), pckp);
+     if(LLVM_IsOpaqueStruct(tp)!=0) {
+       if(nm) LLVM_StructSetBody(tp, marshal_list(elts), length(elts), pckp);
+     };
+     recp = if(nm) ph /@ nm;
+     rettyp = tp;
+     if(and(nm, not(%string=?(nm,"")))) {
+        nch/!nm<-rettyp
+     };
+     return rettyp
+    }
+}
+
+function llvm_compile_type(mdl,typ)
+{
+        strenv = %llvm-mdl-ph(mdl);
+	visit:llvm_ir(irtype: typ)
+	{
+		deep irtype 
+		{
+		       	| integer  -> integer_type(type)
+ 			| pointer  -> LLVM_PointerType(t,0)
+			| %function -> %llvm-function-type(ret, args, [])
+			| varfunction -> %llvm-function-type(ret, args, true)
+		        | float    -> real_type(ftype)
+			| label	   -> LLVM_LabelType()
+ 			| void	   -> LLVM_VoidType()
+ 			| array    -> LLVM_ArrayType(t, car(dims))
+ 			| struct   -> 
+                             llvm_make_struct_type(mdl,strenv,nm, elts,0)
+                        | structref -> {
+                            nch = %llvm-mdl-ph(mdl);
+                            nchk = if(nm) nch/@nm;
+                            if(nchk) nchk else
+                            {
+                              chk = strenv /@ nm;
+                              if(chk) chk else {
+                                 phol = llvm_get_or_create_struct(mdl, strenv, nm);
+                                 return phol
+                              }}}
+                        | alias    ->
+			     LLVM_GetTypeByNameS(%llvm-mdl(mdl), %S<<(id))
+ 			| packed   ->
+                             llvm_make_struct_type(mdl,strenv,nm,elts,1)
+ 			| vector   -> LLVM_VectorType(n, t)
+		}
+	}
+}
+
+function strlen(s) .net(s): ((string)s).get_Length()
+
+function llvm_compile_value(mdl, vars, val)
+	visit:llvm_ir(irval: val)
+	{
+		deep irval 
+		{
+			| integer  -> {
+			     type = if(itp) car(itp) else 'i32';
+			     LLVM_ConstInt(integer_type(type), i32toi64(v), 1)
+			  }
+			| null     -> LLVM_ConstNull      (t)
+			| float    -> {
+			     type = if(ftp) car(ftp) else 'float';
+			     LLVM_ConstRealOfStringS(real_type(type), v)
+			  }
+			| struct   -> LLVM_ConstStruct    (marshal_list(elts), length(elts),0)
+			| array    -> LLVM_ConstArray     (t, marshal_list(elts), length(elts))
+			| vector   -> LLVM_ConstVector    (marshal_list(elts), length(elts))
+			| zero     -> LLVM_ConstNull      (t)
+			| undef    -> LLVM_GetUndef       (t)
+//			| asm      -> LLVM_ConstInlineAsmS (t, asm, constraints, sideeffects)
+			| var      -> hashget(vars, nm)
+                        | global   -> LLVM_GetNamedGlobalS(%llvm-mdl(mdl),%S<<(nm))
+                        | globalfun -> LLVM_GetNamedFunctionS(%llvm-mdl(mdl),%S<<(nm))
+                        | sizeof   -> LLVM_SizeOf(t)
+		};
+		once irtype: forall llvm_compile_type(mdl,node);
+	}
+
+function llvm_compile_expression(mdl, vars, bblocks, Inst, nm, ex)
+{
+       visit:llvm_ir(irexpr: ex) 
+       {
+                // irval nodes are already processed here, so we have
+                // to block visitor from going deep into them:
+                once irval: forall node; 
+		once irtype: forall llvm_compile_type(mdl,node);
+		once irphi:  cons(value, bblocks /@ dst);
+
+	     	deep irexpr 
+		{
+		      | binary         -> Inst(op, [l;r])
+		      | extractelement -> Inst('ExtractElement',[v; idx])
+    		      | insertelement  -> Inst('InsertElement', [v; elt; idx])
+    		      | shufflevector  -> Inst('ShuffleVector', [val1; val2; mask])
+    		      | extractvalue   -> Inst('ExtractValue',  [v; idx])
+   		      | insertvalue    -> Inst('InsertValue',   [v; elt; idx])
+		      | alloca         -> { i = Inst('Alloca',  [t]); vars /! nm <- i; i; }
+		      | load           -> Inst('Load',          [ptr]) 
+		      | getelementptr_inbounds
+		                       ->
+				           Inst('InBoundsGEP',   
+				                [ptr;
+						 marshal_list(idxs);
+					         length(idxs)])
+		      | getelementptr
+		                       -> Inst('GEP',   
+				                [ptr;
+						 marshal_list(idxs);
+					         length(idxs)])
+		      | convop         -> Inst(op,              [v; t])
+		      | icmp	       -> Inst('ICmp',		[llvm_v(LLVMInt,vcond); lhs; rhs])
+		      | fcmp	       -> Inst('FCmp',		[llvm_v(LLVMReal,vcond); lhs; rhs])
+		      | phi            -> { 
+		      		       	    ph = Inst('Phi', [t]);
+				       	    temp = unzip(dsts);
+				       	    LLVM_AddIncoming(ph, marshal_list(car(temp)), marshal_list(cdr(temp)), length(temp));
+				       	    ph;
+					  }
+		      | select         -> Inst('Select',	[vif; vthen; velse])
+		      | call	       -> Inst('Call',		[LLVM_GetNamedFunctionS(%llvm-mdl(mdl), fn); marshal_list(args); length(args)])
+		      | callptr	       -> Inst('Call',		[fn; marshal_list(args); length(args)])
+		      | callptrstd     -> {c = Inst('Call',	[fn; marshal_list(args); length(args)]); LLVM_SetInstructionCallConv(c, LLVMX86FastcallCallConv); return c;}
+		};
+	    };
+}
+
+function add_switch_case(s, bblocks, c)
+{
+  <[v;dstnm]> = c;
+   LLVM_AddCase(s, v, bblocks /@ dstnm);
+}
+
+
+function llvm_compile_toplevel(mdl, bld, toplevel)
+	with hash (vars, bblocks)
+	{
+		visit_stmt = fun(stmt) {
+		   visit:llvm_ir(irstmt:stmt)
+		   {
+		        deep irval:  forall llvm_compile_value(mdl, vars,node);
+			deep irstmt
+		   	{
+				| set -> 
+				  { 
+				      Inst = make_statement(bld, nm); 
+				      vl =  llvm_compile_expression(mdl, vars, bblocks, Inst, nm, e);
+                                      if(and(nm,not(%string=?(%S<<(nm),"")))) {
+                                          vars /! nm <- vl;
+                                      };
+				      return [];
+				  }
+				| setstring -> {
+				    nms = %S<<(nm);
+				    v = (llvm_get_opcode_s('GlobalStringPtr'))(bld, s, nms);
+				    vars /! nms <- v;
+				    []
+				  }
+                      		| ret      ->  (llvm_get_opcode('Ret'))(bld, value)
+                      		| vret      ->  (llvm_get_opcode('RetVoid'))(bld)
+				| br_label ->  (llvm_get_opcode('Br'))(bld, bblocks /@ nm)
+				| br       ->  (llvm_get_opcode('CondBr'))(bld, cnd, bblocks /@ tr, bblocks /@ fl)
+				| switch   -> {s = (llvm_get_opcode('Switch'))(bld,value,bblocks /@ els, length(cases)); iter c in cases do add_switch_case(s, bblocks, c); return s;}
+				| store    -> {
+				    i = (llvm_get_opcode('Store'))(bld,  e, ptr); i }
+	  			| else 	   ->  ccerror(#`(STATEMENT ,node))
+		   	};
+		   }
+		};
+
+	// first pass
+	func = visit:llvm_ir(irtoplevel: toplevel)
+	{
+		once irbblock: {
+		     fun (func) 
+		     { 
+		        b = LLVM_AppendBasicBlockS(func, name);
+		        bblocks /! name <- b;
+		     }; 
+		};
+		deep irtoplevel 
+		{ 
+		  %function -> {
+		    ftype = if(va) 'varfunction' else 'function';
+		    type = [ftype;ret;@map(car, args)];
+		    func = %llvm-add-function(mdl, %symbol->string(name), 
+		                   llvm_compile_type(mdl,type));
+		    iter cc do (match cc with 
+		       'stdcall' -> 
+		                    LLVM_SetFunctionCallConv(func,
+	 	                                                 LLVMX86FastcallCallConv)
+		    );
+		    params = %llvm-get-params(func);
+		    iter [p;nmm] in zip(params, map(cadr,args)) do {
+		        n = %S<<(nmm);
+		        LLVM_SetValueNameS(p, n);
+			vars /! n <- p;
+		    };
+		    iter body do body(func); 
+		    return if(body) func else [];
+		  }
+                | global -> {
+                    gtype = llvm_compile_type(mdl,type);
+                    ptr = LLVM_AddGlobalS(%llvm-mdl(mdl), gtype, name);
+                    LLVM_SetLinkage(ptr, LLVMInternalLinkage);
+                    LLVM_SetInitializer(ptr, 
+                         llvm_compile_value(mdl, mkhash(), v));
+                    return []
+                  }
+                | eglobal -> {
+                    gtype = llvm_compile_type(mdl,type);
+                    ptr = LLVM_AddGlobalS(%llvm-mdl(mdl), gtype, name);
+                    LLVM_SetLinkage(ptr, LLVMExternalLinkage);
+                    return []
+                  }
+                | else -> []
+		};
+	};
+
+	iter:llvm_ir(irtoplevel: toplevel)
+	{
+		deep irbblock:	{ 
+		     	               LLVM_PositionBuilderAtEnd(bld, (bblocks /@ name));
+				       iter code do visit_stmt(code);
+			       }
+	 };
+	 return func;
+ }
+
+define llvm_initp = mkref(nil);
+
+function llvm_init_module(name)
+{
+        if(not(deref(llvm_initp))) {
+  	   %_LLVMInitializeNativeTarget();
+  	   %_LLVMInitializeNativeAsmPrinter();
+           %_LLVMLinkInMCJIT();
+           %_LLVMLinkInInterpreter();
+           %r!(llvm_initp, true);
+        };
+	%llvm-init-module(name);
+}
+
+function llvm_emit_inner(mdl, past)
+{
+  	bld = %llvm-create-builder();
+	foo = llvm_compile_toplevel(mdl, bld, past);
+	LLVM_DisposeBuilder(bld);
+	if(foo) {
+	 <[bld;pm;fpm]> = %llvm-mdl-fpm(mdl);
+          if(fpm) LLVM_RunFunctionPassManager(fpm, foo);
+  	  if(not(deref(llvm_no_engine))) {
+	     return fun()
+                LLVM_GetPointerToGlobal(%llvm-mdl-ee(mdl), foo)
+          }
+	}
+}
+
+function llvm_emit(mdl, past)
+{
+   try llvm_emit_inner(mdl, past)
+   catch (t_MBaseException e) {
+      println("Error while emiting the toplevel LLVM code");
+      println(mbaseerror(e));
+      return []
+   }
+}
+
+function llvm_save(mdl, fname)
+{
+   %llvm-run-pass-manager(mdl);
+   LLVM_WriteBitcodeToFileS(%llvm-mdl(mdl), fname);
+}
+
+function llvm_debug(mdl)
+{
+        %llvm-run-pass-manager(mdl);
+     	LLVM_WriteBitcodeToFileS(%llvm-mdl(mdl), "test.o");
+	LLVM_DumpModule(%llvm-mdl(mdl));
+}
+     
+   
+
+

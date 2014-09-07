@@ -1,0 +1,175 @@
+%literate:
+
+\section{Initial expansion pass}
+
+This is the first pass to be executed over a just parsed AST. Several different
+things are done on this level. Firstly, clike macro applications are 
+partially expanded (but not the typed macros --- they'll be expanded in a type
+propagation pass). Secondly, a number of the initial AST oddities (introduced
+entirely for a sake of parsing simplicity) are 
+substituted with a cleaner code. 
+
+We're getting rid of the ``string'' type here
+(the one we've introduced for string literals), structs and function 
+declarations are simplified, comma--blocks are expanded into a more fundamental
+form, variable declaration initialisers are separated from the declarations,
+and {\tt for} is simplified from initial {\tt protofor} nodes. Standalone expressions are also translated into phoney {\tt set}s.
+
+\pfcode{
+///\commentbox{Applies a macro, if it is valid, and then re-enters into the macro expansion loop.}\\
+function clike_apply_macro(env, nm, args, reenter)
+{
+  mcenv = env /@ "  :macros";
+  if(not(mcenv)) ccerror('CLIKE:MACRO-ENV-UNDEFINED'(nm));
+  mc = mcenv /@ nm;
+  if(not(mc)) ccerror('CLIKE:MACRO-UNDEFINED'(nm));
+  reenter(env, mc(env,args));
+}
+
+///\commentbox{Expand all the macros inside an expression}\\
+function clike_expand_macros_expr(env, tl)
+   visit:clike(llexpr: tl) {
+    deep llexpr {
+       macroapp -> clike_apply_macro(env, nm, args, clike_expand_macros_expr)
+     | else -> node
+    };
+    once llcode : forall clike_expand_macros_code(env, node);
+   }
+
+///\commentbox{Expands all the macros inside a statement}\\
+function clike_expand_macros_code(env, tl)
+   visit:clike(llcode: tl) {
+    deep llcode {
+       macroapp -> clike_apply_macro(env, nm, args, clike_expand_macros_code)
+     | else -> node
+    };
+    once llexpr : forall clike_expand_macros_expr(env, node);
+   }
+
+///\commentbox{A user--defined macros expansion pass. Should be performed right after the core macros expansion pass (which means that user-defined macros should not construct core macros).}\\
+function clike_expand_macros_top(env, tl)
+   visit:clike(lltoplev: tl) {
+    deep lltoplev {
+       macroapp -> clike_apply_macro(env, nm, args, clike_expand_macros_top)
+     | else -> node
+    };
+    once llcode : forall clike_expand_macros_code(env, node);
+   }
+
+///\commentbox{Expand the simplified type definitions representation}\\
+function clike_patch_type(t, p)
+{
+  n = mkref([]);
+  t1 = visit:clike(lltypepatch: p) {
+         deep lltypepatch {
+            v -> { n:=nm; return t; }
+          | else -> node
+         }
+       };
+  return (t1 : 'v'(^n));
+}
+
+///\commentbox{Some core macros are build into clike ast, but must be expanded into simpler constructions before compilation begins and even before the user-defined macro expansion pass. The reason for this simple core macros is in the simplicity of the parser.}\\
+function clike_expand_core(tl)
+{
+   if((^clike_debug_level)>1) println(#`(SRC: ,tl));
+   visit:clike(lltoplev: tl) {
+     // llvarname is a part of a simplified type definition
+     once llvarname {
+        v -> fun(t) {t : node}
+      | p -> fun(t) clike_patch_type(t,p)
+      | else -> ccerror('CLIKE:OOPS'(node))
+     };
+     // Top level global definitions are converted from a simplified form
+     deep lltoplev {
+        global ->  { <nt:nn> = name(tp); mk:node(tp=nt, name=nn) }
+      | eglobal -> { <nt:nn> = name(tp); mk:node(tp=nt, name=nn) }
+      | else -> node
+     };
+     // Same for structure elements
+     deep llmacrostrelt : { <nt:nn> = fld(t); [cadr(nn);nt] };
+     // And functions arguments
+     deep llfuncarg : { <nt:nn> = name(tp); [nt; nn] };
+     // There is no underlying string type, so it is expanded here.
+     // Simplified structure is converted into a normal one
+     deep lltype {
+        string -> 'ptr'('integer'('i8'))
+      | macrostruct -> 'struct'(nm,@ts)
+      | else -> node
+     };
+     deep llexpr {
+        // Simple parsed 'in-expression-block' is converted into a normal one
+        protoinblock -> 'inblock'(LOC,'begin'(@cuttail(c)),{
+                           match lasttail(c) with
+                             ['expr'(e)] -> e
+                           | else -> ccerror('CLIKE:INCORRECT-INBLOCK'(node))
+                         })
+        // Comma-delimited list of expressions is translated into an in-block
+      | commaexprs -> 'inblock'(LOC,'begin'(@map e in cuttail(es) do
+                                          'expr'(e)),
+                                car(lasttail(es)))
+      | else -> node
+     };
+     deep llcode {
+        // Compiler backend knows nothing about variable initialisers,
+        // so here 'manyvardefs' is expanded into simpler constructions.
+        manyvardefs -> 'begin'(
+            @map append vars do {
+               match vars with
+                  s(nm) -> { 
+                    <nt:nn> = nm(tp);
+                     ['vardef'(nt,nn)]
+                  }
+                | d(nm,ini) -> {
+                    <nt:nn> = nm(tp);
+                     ['vardef'(nt,nn);'set'([], 'var'(cadr(nn)), ini)]
+                  }
+            }
+        )
+        // For, as it parsed, should be translated into a simpler form to
+        // be compiled.
+      | protofor -> 'for'(LOC, init, (match cnds with
+                                   [one] -> one
+                                 | one : many -> 'logand'([],one,@many)
+                                 | [] -> 'const'('integer'('i32',1))),
+                                (match steps with
+                                   [one] -> 'expr'(one)
+                                 | else -> 
+                                       'begin'(@map steps do 'expr'(steps))),
+                                body)
+        // A single embedded set expression is translated into a statement,
+        // just for a better readability of an intemediate code.
+      | expr -> (
+          match e with
+             'eset	'(l,n,v) -> 'set'(l,n,v)
+           | else -> node
+        )
+      | else -> node
+     }
+   }
+}
+
+
+///\commentbox{A shortcut for defining Clike macros in the default macro environment}\\
+#(macro clike_defmacro (name args . body)
+    `(hashput clike_default_mcenv ,(S<< name)
+        (fun (env macro-body)
+           (format macro-body ,args
+              ,@body))))
+
+///\commentbox{A shortcut for defining Clike typed macros in the default macro environment}\\
+#(macro clike_deftexpander (name args . body)
+    `(hashput clike_default_mcenv ,(S<< " :typexpander: " name)
+        (fun (env return_type macro-body)
+           (format macro-body ,args
+              ,@body))))
+
+///\commentbox{A shortcut for defining Clike typing rules in the default macro environment}\\
+#(macro clike_deftrules (name args . body)
+    `(hashput clike_default_mcenv ,(S<< " :typrules: " name)
+        (fun (env macro-body)
+           (format macro-body ,args
+              ,@body))))
+
+
+}

@@ -1,0 +1,16 @@
+include "../llvm-bindings-list.al";
+
+#(function filter_llvm (x) ((<r> "LLVM" _ ?) (string->list x)))
+#(function mangle_llvm (nm) (S<< "LLVM_" (list->string (p-rest (filter_llvm (S<< nm))))))
+
+function main()
+{
+ println("#include \"llvm-wrapper.h\"");
+ iter ([nm;tp;args]) in %llvm-bindings-lst do {
+   body = %S<<(" return ", nm, "(", strinterleave(map ([pnm;ptp]) in args do pnm, ", "), ");");
+   println(%S<<( tp, " ", mangle_llvm(nm),
+                     "(", strinterleave(map ([pnm;ptp]) in args do %S<<(ptp, " ", pnm), ", "), ") {", body, "}"))
+ }
+}
+
+main()

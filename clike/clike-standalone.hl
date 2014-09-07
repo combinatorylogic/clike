@@ -1,0 +1,43 @@
+#(ctimex (define debug-display-include-paths #t))
+#(ctimex (define compiler-optimise-cache nil))
+
+#(ctimex (begin
+	  (define assembly-version (S<< "0.1.0.0"))
+	  (define assembly-keyfile "lvmkey.snk")
+	  (define compiler-optimise-cache nil)
+	  ))
+
+#(n.module CLikeSCore)
+
+#(sysdll MBaseLogic)
+
+-------------------------------------
+
+// STUBS:
+
+function llvm_emit(mdl, code) []
+
+function llvm_init_module(nm) []
+
+function llvm_save(mdl, name) []
+
+define llvm_no_engine = mkref([])
+define %llvm-optimise = mkref([])
+
+function clike_ir_post(mdl)
+   mdl
+
+-------------------------------------
+
+define clike_no_llvm = mkref(true);
+define clike_outfile_v = mkref([]);
+define clike_debug_level = mkref(0);
+define clike_default_mcenv = mkhash();
+
+
+include "./clike.hl";
+include "./clike-utils.hl";
+include "./clike-llvm.hl";
+include "./clike-api.hl";
+
+

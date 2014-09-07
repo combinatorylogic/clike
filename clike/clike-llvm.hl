@@ -1,0 +1,181 @@
+--------------
+
+function clike_get_ptr(nm)
+{
+    t = shashget(getfuncenv(), 'clike-current-env');
+    return (hashget(t, %S<<(" :refl: (",nm,")")))();
+}
+
+function register_ptr(env, nm, ptr)
+{
+   env /! %S<<(" :refl: (",nm,")") <- ptr;
+   return ptr
+}
+
+function clike_llvm_codename(llcode)
+  match llcode with
+     %function(cc,name,@_) -> name
+   | else -> []
+
+function clike_compile_ast(mdl, env, code)
+{
+ match code with 
+    [pfront(x)] -> { codex = %hlevel-compile(x);
+                      %read-compile-eval(codex);
+         }
+  | else -> {
+    llcode = clike_to_llvm(env,code);
+    if(deref(clike_no_llvm)) {
+      llcode1 = clike_ir_post(llcode);
+      iter l in  llcode1 do
+       fprintln(deref(clike_outfile_v), %to-string(l))
+    } else
+    iter llcode do {
+       if(deref(clike_debug_level)>7) println(#`(LLVM: ,llcode));
+       nm = clike_llvm_codename(llcode);
+       pt = llvm_emit(mdl, llcode);
+       if(nm) register_ptr(env, nm, pt);
+    }
+   }
+}
+
+function clike_compile_stream(mdl, env, str)
+{
+  ccode = mkref(nil);
+  collectcode(c) = {%r!(ccode,c:deref(ccode))};
+  flushcode() = {
+    code = reverse(deref(ccode));
+    %r!(ccode,nil);
+    clike_compile_ast(mdl, env, code);
+  };
+  collector(add, get) {
+    mcadd(v) = {
+      match v with
+        [] -> []
+      | 'pfront'(code) -> {
+              flushcode();
+              codex = %hlevel-compile(code);
+              %read-compile-eval(codex);
+         }
+      | else -> collectcode(v)
+    };
+    ploop(%peg:makeenv(), str, peg_pfclike, mcadd);
+    flushcode();
+  }
+}
+
+function clike_compile_file(mdl, env, fname)
+{
+  str = mkref(%peg:file->stream(fname));
+  clike_compile_stream(mdl, env, str);
+}
+
+function clike_compile_string(mdl, env, s)
+{
+  str = mkref(%peg:str->stream(s));
+  clike_compile_stream(mdl, env, str);
+}
+
+function clike_bypass_one(mdl, env, llcode)
+ match llcode with
+     comment(clike(x)) -> clike_compile(fun(t) {clike_bypass_one(mdl, env, t)}, env, x)
+  | else -> {
+      nm = clike_llvm_codename(llcode);
+      pt = llvm_emit(mdl, llcode);
+      if(nm) register_ptr(env, nm, pt);
+    }
+
+function clike_bypass_file(mdl, env, fn)
+{
+   fi0 = %io-open-read(fn);
+   fi = mkreader(fi0);
+   do loop () {
+     r = %xio-read(fi);
+     if(r) {
+          clike_bypass_one(mdl, env, r);
+          loop();
+     }
+   };
+   %xio-close(fi);
+}
+
+/////////////// Useful things for extending front-end
+
+syntax in expr, start (pfclike): '[clquot]:t' +
+  {
+    clquot := { ".clike" "`" [cltop]:t "`" => t }
+           /  { ".clike-expr" "`" [clexpr]:t "`" => t }
+           /  { ".clike-code" "`" [clcode]:t "`" => t }
+           /  { ".clike-type" "`" [cltype]:t "`" => t }
+           ;
+  }
+ { 'qquote'(t) }
+
+
+function clike_symbol(v)
+  match v with
+     stmt(expr(var(v))) -> v
+   | else -> []
+
+function clike_get_expr(v)
+  match v with
+     stmt(expr(e)) -> e
+   | else -> []
+
+function clike_get_stmt(v)
+  match v with
+     stmt(s) -> s
+   | else -> []
+
+function clike_get_type(t)
+  match t with
+     type(v) -> v
+   | else -> []
+
+function clike_get_top(t)
+  match t with
+     top(t) -> t
+   | else -> []
+
+function clike_get_verb(v)
+  match v with
+     verb(x) -> x
+   | else -> []
+
+////////////////////////
+
+function clike_renvar_code(c, f, t)
+{
+  ren(nm) = if(nm === f) t else nm;
+  visit:clike(llcode:c) {
+     deep llexpr {
+        var -> mk:node(nm=ren(nm))
+      | else -> node
+     };
+     deep lvalue {
+        var -> mk:node(nm=ren(nm))
+      | else -> node
+     };
+  }
+}
+
+function clike_renvar_expr(c, f, t)
+  cadr(clike_renvar_code('expr'(c),f,t))
+
+
+syntax in top, start (pfclike): '".C" ":" [cltop]:t'
+{
+   'expr'('lisp'('ctimex'('clike_compile_ast_simple'('quote'(t)))))
+}
+
+syntax in top, start: '".C-init-module" [string]:nm'
+{
+  'expr'('lisp'(#`(top-begin (define clike-current-env (clike_global_env))
+                                  (define clike-current-llvm-env 
+				        (llvm_init_module ,nm)))))
+}
+
+function clike_compile_ast_simple(cast)
+  clike_compile_ast(shashget(getfuncenv(),'clike-current-env'),
+	            shashget(getfuncenv(),'clike-current-llvm-env'),
+		    [cast])

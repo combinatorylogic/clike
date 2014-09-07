@@ -1,0 +1,49 @@
+define NULL = .net: IntPtr.Zero;
+
+---------------------------------------------------
+#(force-class-flush)
+
+-----------------------
+
+function marshal_str(str0)
+{
+  if(str0) {
+   str = %any->string(str0);
+   notnet(System.String str) { leave System.Runtime.InteropServices.Marshal.StringToHGlobalAnsi(str); }
+  } else .net: System.IntPtr.Zero;
+}
+
+#(force-class-flush)
+------------------------------
+
+function marshal_list(l)
+{
+	if ( %null?(l))	.net: System.IntPtr.Zero;
+	else if (%list?(l))
+	{
+		fst = car(l);
+ 		sizeof = .net(fst): System.Runtime.InteropServices.Marshal.SizeOf(fst);
+		num = length(l);
+		len = sizeof * num;
+		pt = notnet(int len) { leave System.Runtime.InteropServices.Marshal.AllocHGlobal(len); };
+		iter l count i do
+		{
+			notnet(int sizeof, System.IntPtr pt, System.Object l, int i)
+			{
+			   if ( typeof(l) == Type.GetType("System.IntPtr")) 
+				System.Runtime.InteropServices.Marshal.WriteIntPtr(pt, i*sizeof, (System.IntPtr)l);
+        		   else if ( typeof(l) == Type.GetType("System.Int32")) 
+				System.Runtime.InteropServices.Marshal.WriteInt32(pt, i*sizeof, (System.Int32)l);
+                           leave null;
+			};
+		};
+		return pt;
+	} else .net: System.IntPtr.Zero;
+}
+
+
+#(force-class-flush)
+--------------------------------
+
+
+

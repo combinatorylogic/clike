@@ -1,0 +1,23 @@
+#(ctimex (define debug-display-include-paths #t))
+
+#(ctimex (begin
+	  (define assembly-version (S<< "0.1.0.0"))
+	  (define assembly-keyfile "lvmkey.snk")
+	  ))
+
+// #(n.module MBaseLLVM)
+
+#(macro define-enum-constant (nm . pairs)
+   `(begin
+      ,@(foreach-map (p pairs)
+	  `(define ,@p))))
+	   
+
+
+define t_byte = #(dotnet "System.Byte");
+
+include "../native/marshal.hl";
+#(include "../lib/llvm-bindings.al");
+include "./llvm.hl";
+include "./llvm-ast.hl";
+include "./llvm-emit.hl";

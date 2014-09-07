@@ -1,0 +1,124 @@
+%literate:
+
+\section{A toplevel compiler}
+
+
+A compilation frontend for function bodies: binds all the passes together
+Pipeline is following:
+   types propagation $\to$ tree compilation $\to$ 
+   values redefs elimination $\to$ tree flattening $\to$ 
+   values redefs elimination $\to$ metadata elimination $\to$
+   basic blocks extraction
+
+\pfcode{
+function clike_compile_code(toploop, env, code, rettype)
+{
+  clike_dbg(1, "S0:",code);
+
+  step1 = clike_types(env, code, toploop);   clike_dbg(1,"S1:",step1);
+  step2 = clike_precompile(env, step1);      clike_dbg(2,"S2:",step2);
+  step3 = clike_fix_sets(step2);             clike_dbg(3,"S3:",step3);
+  step3_1 = clike_lift_1(step3);             clike_dbg(4,"S3_1:",step3_1);
+  step4 = clike_fix_sets(step3_1);           clike_dbg(5,"S4:",step4);
+  step5 = clike_cleanup(step4);
+  step6 = clike_basicblocks(rettype,step5);  clike_dbg(6,"S6:",step6);
+
+  return step6;
+}
+}
+    
+
+ A compilation frontend for toplevel definitions. It is possible that a new toplevel expression is lifted, so an external top loop function should be provided.
+
+\pfcode{
+function clike_compile(etoploop, topenv, top)
+ collector(topsadd, topsget)
+ {
+  toploop(env, t) = { iter i in etoploop(t) do topsadd(i) };
+  rcode = 
+   visit:clike(lltoplev: top)
+   {
+     once topident : clike_env_name_mangle(topenv:[], node);
+     once llvarname { v -> mk:node(name=clike_env_name_mangle(topenv:[], name))
+                    | else -> node };
+     once llcode : forall node; // stop here, do not touch llvarnames inside
+     deep lltoplev {
+        begin -> map append es do es
+      | typedef -> {  clike_env_defalias(topenv, name, tp);
+                      clike_dbg(0,"Top:",#`(typedef: ,tp ,name));
+                      ['comment'('clike'(node))]}
+      | xfunc -> {clike_env_deffunction(topenv, name, va, ret, args); []}
+      | xglobal -> {clike_env_defglobal(topenv, name, tp); []}
+      | efunc -> {clike_env_deffunction(topenv, name, va, ret, args);
+                  clike_dbg(0,"Top:",#`(efunc: ,name ,ret ,@args ,va));
+                  env = topenv:mkhash();
+                  cc1 = if(cc) ['stdcall'] else [];
+                  ['comment'('clike'('xfunc'(ret,name, va,@args)));
+                   'function'(cc1,name, clike_c_type(env, clike_env_unitype(env, ret)), va,  
+                                 map [tp;'v'(nm)] in args do {
+                                    [clike_c_type(env,clike_env_unitype(env, tp)); nm]
+                                 })]
+                 }
+      | global -> {clike_env_defglobal(topenv, cadr(name), tp);
+                   clike_dbg(0,"Top:",#`(global: ,tp ,name));
+                   env = topenv:mkhash();
+                   gtp = clike_c_type(env,clike_env_unitype(env, tp));
+                   return ['global'( %S<<(cadr(name)),
+                              gtp,
+                              'zero'(gtp)
+                           )]}
+      | eglobal -> {clike_env_defglobal(topenv, cadr(name), tp); 
+                    clike_dbg(0,"Top:",#`(global: ,tp ,name));
+                    env = topenv:mkhash();
+                    return ['comment'('clike'('xglobal'(tp, cadr(name))));
+                            'eglobal'( %S<<(cadr(name)),
+                                       clike_c_type(env,clike_env_unitype(env, tp)) )]
+                   }
+      | cfunc -> {
+                  env = clike_local_env(topenv, args);
+                  clike_dbg(0,"Top:",#`(cfunc: ,name ,ret ,@args));
+                  clike_env_deffunction(topenv, name, va, ret, args);
+                  rett =  clike_env_unitype(env, ret);
+                  cbody = clike_compile_code(toploop,env,body,
+                                               clike_c_type(env,rett));
+                  clike_env_savebody(topenv, name, body, cbody);
+                  cc1 = if(cc) ['stdcall'] else [];
+                  ['comment'('clike'('xfunc'(ret,name,va,@args)));
+                   'function'(cc1, name, clike_c_type(env,rett), va,
+                                 map [tp;'v'(nm)] in args do {
+                                    [clike_c_type(env,clike_env_unitype(env, tp)); nm]
+                                 }, 
+                                 @cbody)]
+        }
+      | else -> ccerror('CLIKE:NOT-IMPLEMENTED-YET'(node))
+     }
+    };
+  iter rcode do topsadd(rcode);
+  return topsget();
+}
+}
+
+\pfcode{
+function clike_to_llvm_inner(env, cltops)
+{
+  cl1 = map t in cltops do clike_expand_macros_top(env, clike_expand_core(t));
+  cl2 = map append t in cl1 do clike_compile(fun(t) {clike_to_llvm_inner(env, [t])}, env, t);
+  return cl2;
+}
+
+
+function clike_to_llvm(topenv, tops)
+{
+  try {
+  try clike_to_llvm_inner(topenv, tops)
+  catch (t_MBaseException e) {
+     println("Compiler error:");
+     println(mbaseerror(e));
+     println(%->s(e));
+     return []
+  }} catch (t_Exception e) {
+     println(%->s(e));
+     return []
+  }
+}
+}

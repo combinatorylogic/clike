@@ -1,0 +1,19 @@
+include "../llvm-bindings-list.al";
+
+#(define export_prefix (S<< "extern " #\" "C" #\" " DLL_EXPORT"))
+
+#(function filter_llvm (x) ((<r> "LLVM" _ ?) (string->list x)))
+#(function mangle_llvm (nm) (S<< "LLVM_" (list->string (p-rest (filter_llvm (S<< nm))))))
+
+function main() {
+  println("#include \"../llvm-wrapper-base.h\"");
+
+  iter ([nm;tp;args]) in %llvm-bindings-lst do {
+     println(%S<<( export_prefix , " ", tp, " ", mangle_llvm(nm),
+                     "(", strinterleave(map ([pnm;ptp]) in args do %S<<(ptp, " ", pnm), ", "), ");"))
+  }
+}
+
+main()
+
+

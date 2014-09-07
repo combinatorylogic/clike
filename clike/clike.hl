@@ -1,0 +1,43 @@
+/*
+ 
+ A C-like language for LLVM.
+
+ A compilation pipeline is following:
+
+  * Top level loop
+      clike_to_llvm, clike_compile, 
+  * Parser -> clike extended AST
+      pfront_pfclike grammar
+  * Macro expansion -> clike simple AST
+      clike_expand_macros_top
+
+  == Function body level pipeline (clike_compile_code)
+
+  * clike (type propagation, implicit casts and intrinsics injection) -> clike2
+      clike_types
+  * clike2 (expanding into LLVM instructions tree) -> clike3
+      clike_precompile
+  * clike3 (flattening, metadata cleanup) -> clike3
+      clike_lift_1, clike_fix_sets, clike_cleanup
+  * clike3 (basic blocks detection) -> LLVM AST
+      clike_basicblocks
+
+ */
+
+////// Definitions for ASTs: clike, clike2, clike3
+litinclude ("../doc/clike-ast") "./clike-ast.hl";
+////// Compiler environment support
+include "./clike-env.hl";
+////// Compiler pipeline (after macro expansion)
+//////   Types propagation, implicit casts, injections:
+litinclude ("../doc/clike-types-utils") "./clike-types-utils.hl";
+litinclude ("../doc/clike-types") "./clike-types.hl";
+//////   Tree compilation, flattening, cleanups:
+litinclude ("../doc/clike-compiler") "./clike-compiler.hl";
+////// Macro expansion engine
+litinclude ("../doc/clike-expand") "./clike-expand.hl";
+////// Top level compiler
+litinclude ("../doc/clike-compiler-top") "./clike-compiler-top.hl";
+////// Parser, syntax extensions
+litinclude ("../doc/clike-parser") "./clike-parser.hl";
+

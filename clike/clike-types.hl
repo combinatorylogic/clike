@@ -1,0 +1,177 @@
+%literate:
+
+\subsection{A compilation pass: types propagation}
+
+ N.B. ---- a typed macros expansion step is performed within this pass as well.
+
+\pfcode{
+function clike_types_inner (env, c, toploop)
+{
+   vars = mkhash();
+   do loop(c0 = c)
+    visit:clike(llcode: c0)
+    {
+       deep llvarname {
+           v -> name
+        |  p -> ccerror('CLIKE:WRONG-PASS'(node))
+       };
+       deep llexpr {
+           call -> {
+               nid = clike_env_name_resolve(env, id);
+               <tp:va:atps> = clike_env_funcretargtypes(env, nid);
+               return tp : clike_fix_funcall('call', LOC, nid, va, args, atps);
+           }
+         | callptr -> {
+               <tp:va:atps> = clike_funcptrtype(car(fn));
+               return tp : clike_fix_funcall('callptr', LOC, fn, va, args, atps);
+           }
+         | stdcallpfx -> car(e):node
+         | bin -> clike_fix_binoptypes(LOC, op,l,r)
+         | compop -> 'bool'() : clike_fix_compoptypes(LOC, op ,l,r)
+         | un -> case op { 'minus' -> car(e) : node
+                         | 'not' -> clike_fix_bool(e) }
+         | tri -> car(tr) : (mk:node(cnd=clike_fix_bool(cnd)))
+         | typecast -> {
+             t1 = clike_env_unitype(env, t);
+             clike_castto(t1, e)
+           }
+         | pre -> car(v) : mk:node(vtyp = [car(v)])
+         | post -> car(v) : mk:node(vtyp = [car(v)])
+         | inblock -> car(r) : node
+         | eset -> clike_deref_type(car(v)) : clike_fix_settype('eset',LOC,v,e)
+         // TODO: implicit casts for modops
+         | modop -> clike_fix_modoptypes(LOC, op, l, r)
+         | globstring -> clike_string_type:node
+         | const -> {clike_const_type(c) :
+                     match c with 
+                       ['string';s] -> 'globstring'(s)
+                     | else -> node }
+         | var -> {
+            v1 = vars /@ nm;
+            if(v1) v1:node else
+            {
+              v2 = clike_env_argtype(env, nm);
+              if(v2) v2:'arg'(nm) else
+              {
+                nnm = clike_env_name_resolve(env, nm);
+                v3 = clike_env_globtype(env, nnm);
+                if(v3) v3:'glob'(nnm) else
+                {  v4 = clike_env_globfunctype(env, nnm);
+                   if(v4) v4:'globfun'(nnm) else
+                      ccerror('CLIKE:UNKNOWN-VAR'(nm))
+                }}}}
+         | arg -> { v2 = clike_env_argtype(env, nm); v2 : node }
+         | glob -> { v3 = clike_env_globtype(env, nm); v3 : node }
+         | globfun -> { v4 = clike_env_globfunctype(env, nm); v4:node }
+         | array -> clike_array_elt_type(car(ar)) : node
+         | ref -> car(e) : node // It's an lvalue already, must be a ref anyway
+         | deref -> clike_deref_type(car(e)) : node
+         | getelt -> clike_fieldtype(car(e), fldnm) : node
+         | sizeof -> 'integer'('i64') : node
+         | logand -> 'bool'():'logand'(LOC,@map es do clike_fix_bool(es))
+         | logor -> 'bool'():'logor'(LOC,@map es do clike_fix_bool(es))
+
+         // Applying type rules for a dual-stage macro:
+         | typedmacro -> {
+              rule = clike_env_gettypingrules(env, nm);
+              rtype = if(rule) rule(env, args) else [];
+              expander = clike_env_gettypedexpander(env, nm);
+              ncode_0 = expander(env, rtype, args); // args are going to be
+                  // stripped from types during this expansion
+              ncode = loop('passexpr'(ncode_0)); // redo the propagation
+              return ncode
+           }
+         | else -> ccerror('CLIKE:NOT-ALLOWED-HERE'(node))
+       };
+       deep llcode {
+           vardef -> {
+              ntp =  clike_env_unitype(env, tp);
+              vars /! name <- clike_decay(ntp);
+              cdr(env) /! name <- 'lvar'(ntp);
+              return mk:node(tp = ntp);
+           }
+         | varinit -> {
+              rtp = car(r);
+              vars /! l <- clike_decay(rtp);
+              cdr(env) /! l <- 'lvar'(rtp);
+              return 'begin'('vardef'(rtp,l),
+                             'set'([],'ptr'(rtp):'var'(l) , r))
+           }
+         | toplift -> {toploop(env, t); 'begin'()}
+         | set -> clike_fix_settype('set',LOC,l,e)
+         | passexpr -> return e
+         | if2 -> mk:node(e=clike_fix_bool(e))
+         | if3 -> mk:node(e=clike_fix_bool(e))
+         | for -> mk:node(cnd=clike_fix_bool(cnd))
+         | do -> mk:node(cnd=clike_fix_bool(cnd))
+         | while -> mk:node(cnd=clike_fix_bool(cnd))
+         | else -> return node
+       };
+       deep lvalue {
+           var -> {
+             <vt:vv> = loop('passexpr'(node));
+             match vv with
+                 arg(_) -> 'arg'(vt):vv
+               | else -> clike_make_ref_type(vt):vv
+           }
+        |  array -> clike_make_ref_type(clike_array_elt_type(car(ar))):node
+        |  deref -> {
+              match e with
+                 ptr(t):arg(a) -> e
+              |  array(t,@idxs):arg(a) -> e
+              |  t:x -> t:node
+           }
+        |  getelt -> clike_make_ref_type(clike_fieldtype(car(e),fldnm)):node
+        |  else -> ccerror('CLIKE:WRONG-PASS'(node))
+       };
+    }
+}
+}
+
+
+
+ An additional tiny pass which replaces the abstract 'bool' with
+  a concrete ingeger type. Bool was needed for fixing boolean expressions,
+  and it should not interfere later with casting compilation.
+
+\pfcode{
+function clike_clean_bools(code)
+  visit:clike2(llcode: code) {
+     deep lltype {
+        bool -> 'integer'('i32')
+      | else -> node
+     }
+  }
+}
+
+
+\pfcode{
+///\commentbox{An interface function, binds all the typing passes together}\\
+function clike_types (env, c, toploop)
+  clike_clean_bools(clike_types_inner(env,c,toploop))
+}
+
+\pfcode{
+///\commentbox{Convert clike2 back into clike}\\
+function clike_untype_llcode(c)
+  visit:clike2(llcode:c)
+    { deep llcode {
+         passexpr -> e
+       | passlvalue -> e
+       | else -> node
+      };
+      deep llexpr : e; deep lvalue : e;}
+}
+
+
+\pfcode{
+///\commentbox{Convert clike2 back into clike}\\
+function clike_untype_llexpr(c)
+   clike_untype_llcode('passexpr'(c))
+}
+
+\pfcode{
+///\commentbox{Convert clike2 back into clike}\\
+function clike_untype_lvalue(c)
+   clike_untype_llcode('passlvalue'(c))
+}

@@ -1,0 +1,38 @@
+
+mixed class Meta.Scripting.CLike {
+   mbase public static object init_module(string mdname)
+   {
+      return [clike_global_env();llvm_init_module(mdname)]
+   }
+
+   mbase public static object set_debuglevel(int levl)
+   {
+      clike_debug_level := levl;
+      return levl;
+   }
+
+   mbase public static object compile(object cenv, string code)
+   {
+     <[env;mdl]> = cenv;
+     return clike_compile_string(mdl,env,code);
+   }
+
+   mbase public static object compileFile(object cenv, string fname)
+   {
+     <[env;mdl]> = cenv;
+     return clike_compile_file(mdl, env, fname);
+   }
+
+   mbase public static object save(object cenv, string fname)
+   {
+      <[env;mdl]> = cenv;
+      return llvm_save(mdl, fname);
+   }
+   mbase public static object getptr(object cenv, string glob)
+   {
+      <[env;mdl]> = cenv;
+      return hashget(env, %S<<(" :refl: (",glob,")"));
+   }
+}
+
+

@@ -1,0 +1,32 @@
+#(ctimex (define debug-display-include-paths #t))
+#(ctimex (define compiler-optimise-cache nil))
+
+#(ctimex (begin
+	  (define assembly-version (S<< "0.1.0.0"))
+	  (define assembly-keyfile "lvmkey.snk")
+	  (define compiler-optimise-cache nil)
+	  ))
+
+#(n.module CLikeCore)
+
+-------------------------------------
+
+#(usedll MBaseLLVM)
+
+function clike_ir_post(mdl)
+   return mdl
+
+define clike_no_llvm = mkref([]);
+define clike_outfile_v = mkref([]);
+define clike_debug_level = mkref(0);
+define clike_default_mcenv = mkhash();
+
+include "./clike.hl";
+
+include "./clike-utils.hl";
+
+include "./clike-llvm.hl";
+
+include "./clike-api.hl";
+
+

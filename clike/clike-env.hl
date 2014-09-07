@@ -1,0 +1,236 @@
+//// Environments are implemented in a simple way, using huge hash tables
+//// It should not be a problem, as normally CLike programs should be small.
+
+//// Makes an empty global environment
+function clike_global_env()
+{
+  e = mkhash();
+  e /! "  :macros" <- clike_default_mcenv;
+  return e;
+}
+
+
+//// Finds a global name in an environment
+function clike_env_name_resolve(env, name)
+{
+ <genv:_> = env;
+  resolver = genv /@ "  :name resolver: ";
+  if(resolver) resolver(name) else name
+}
+
+//// Generates a mangled name, if a mangler is defined
+function clike_env_name_mangle(env, name)
+{
+ <genv:_> = env;
+  m = genv /@ "  :name mangler: ";
+  if(m) m(name) else name
+}
+
+//// Adds a new resolver function to the environment, pushes the
+//// previous one into a stack.
+function clike_push_resolver(env, fn)
+{
+ <genv:_> = env;
+  oldresolver = genv /@ "  :name resolver: ";
+  genv/! "   :name resolver stack: " <- 
+        (oldresolver:(genv/@"   :name resolver stack: "));
+  genv /! "  :name resolver: " <- fn;
+}
+
+//// Adds a new mangler function to the environment, pushes the
+//// previous one into a stack
+function clike_push_mangler(env, fn)
+{
+ <genv:_> = env;
+  oldresolver = genv /@ "  :name mangler: ";
+  genv/! "   :name mangler stack: " <- 
+        (oldresolver:(genv/@"   :name mangler stack: "));
+  genv /! "  :name mangler: " <- fn;
+}
+
+//// Pops a previous resolver from a stack
+function clike_pop_resolver(env)
+{
+ <genv:_> = env;
+  <hd:tl> = genv/@ "   :name resolver stack: ";
+   genv/!"   :name resolver stack: "<-tl;
+  genv /! "  :name resolver: " <- hd;
+}
+
+//// Pops a previous mangler function from a stack
+function clike_pop_mangler(env)
+{
+ <genv:_> = env;
+  <hd:tl> = genv/@ "   :name mangler stack: ";
+   genv/!"   :name mangler stack: "<-tl;
+  genv /! "  :name mangler: " <- hd;
+}
+
+
+//// Makes a local environment pre-filled with function argument types
+function clike_local_env(topenv, args)
+ {
+   newenv = mkhash();
+   env = topenv : newenv;
+   iter args do {
+     <[tp;'v'(nm)]> = args;
+      newenv /! nm <- 'arg'(clike_env_unitype(env, tp));
+   };
+   return env;
+ }
+
+//// A helper function: gets a function return type
+function clike_functype(ftyp)
+   visit:clike(lltype:ftyp) {
+      once lltype { fun -> ret : va : args
+                  | else -> ccerror('CLIKE:NOT-A-FUNCTION-TYPE'(ftyp))}}
+
+//// A helper function: gets a return type from a function pointer
+function clike_funcptrtype(ftyp)
+   visit:clike(lltype:ftyp) {
+      once lltype { ptr -> clike_functype(t)
+                  | else -> ccerror('CLIKE:NOT-A-POINTER-TYPE'(ftyp))}}
+
+//// Gets a return type for a given function name (which can be a local 
+////    variable, an argument or a global variable - in this case it is
+////    treated as a pointer to a function)
+function clike_env_funcretargtypes(env, id)
+{
+   <t:l> = env;
+   chk0 = l/@id; // check if it is a var or an arg
+   if(chk0) clike_funcptrtype(cadr(chk0))
+   else {
+     chk1 = t/@id; // check if it is a global pointer or a function declaration
+     match chk1 with
+        global(ptrtyp) -> clike_funcptrtype(ptrtyp)
+      | %function(ftyp) -> clike_functype(ftyp)
+      | else -> ccerror('CLIKE:UNDEFINED-FUNCTION'(id))
+   }
+}
+
+//// Checks if an id is an argument, if so - returns its type
+function clike_env_argtype(env, id)
+{
+   <t:l> = env;
+    chk0 = l/@id;
+    match chk0 with
+       arg(t) -> t
+     | else -> []
+}
+
+//// Checks if an id is a global variable, if so - returns its type
+function clike_env_globtype(env, id)
+{
+  <t:l> = env;
+   chk0 = t/@id;
+   match chk0 with
+       global(t) -> t
+     | else -> []
+}
+
+function clike_env_globfunctype(env, id)
+{
+  <t:l> = env;
+   chk0 = t/@id;
+   match chk0 with
+       %function(t) -> t
+     | else -> []
+}
+
+//// Resolves a type alias
+function clike_env_getalias(env, id)
+{
+  <t:l> = env;
+   chk0 = t/@id;
+   match chk0 with
+       alias(t) -> t
+     | else -> ccerror('CLIKE:UNDEFINED-TYPE-ALIAS'(id))
+}
+
+function clike_env_checkstructalias(env, nm0, node)
+if(nm0) {
+   nm=car(nm0);
+  <t:l> = env;
+   id = %S<<("struct: ",nm);
+   chk0 = t/@ id;
+   match chk0 with
+       struct(@_) -> []
+     | else -> {t/!id <- node}
+}
+
+function clike_env_checkstructaliasexist(env, nm0)
+if(nm0) {
+   nm=car(nm0);
+  <t:l> = env;
+   id = %S<<("struct: ",nm);
+   chk0 = t/@ id;
+   match chk0 with
+       struct(@_) -> true
+     | else -> []
+}
+
+function clike_env_getstructalias(env, id)
+{
+  <t:l> = env;
+   chk0 = t/@ %S<<("struct: ",id);
+   match chk0 with
+       struct(@_) -> chk0
+     | else -> 'structref'(id)
+}
+
+//// A helper function which expands all the type aliases present in the current
+////  environment
+function clike_env_unitype(env, tp)
+  do loop(t = tp)
+   visit:clike(lltype: t) {
+    deep lltype {
+       alias -> loop(clike_env_getalias(env, x))
+     | structalias -> loop(clike_env_getstructalias(env, nm))
+     | struct -> {clike_env_checkstructalias(env, nm, node); node}
+     | else -> node
+    }}
+
+//// A global environment management function: defines a type alias
+function clike_env_defalias(env, name, tp)
+{
+  r = clike_env_unitype(env:mkhash(), tp);
+  env /! name <- 'alias'(r);[]}
+
+//// A global environment management function: defines a function signature
+function clike_env_deffunction(env, name, va, ret, args)
+{
+  denv = env:mkhash(); // dummy environment
+  rret = clike_env_unitype(denv, ret);
+  rargs = map a in args do {<tp:_> = a; clike_env_unitype(denv, tp)};
+  env /! name <- 'function'('fun'(rret,va,@rargs)); []
+}
+
+//// A global environment management function: support for a compilation-time
+////    reflection.
+function clike_env_savebody(topenv, name, body, cbody)
+{
+   topenv /! %S<<(" :defn: (",name,")") <- [body;cbody];
+}
+
+//// A global environment management function: defines a global variable type
+function clike_env_defglobal(env, name, tp)
+{
+  denv = env:mkhash(); // dummy environment
+  rtp = clike_env_unitype(denv, tp);
+  env /! name <- 'global'(rtp); []
+}
+
+function clike_env_gettypingrules(env, nm)
+{
+  <genv:_> = env; mcenv = genv /@ "  :macros";
+   return mcenv /@ %S<<(" :typrules: ",nm);
+}
+
+function clike_env_gettypedexpander(env, nm)
+{
+  <genv:_> = env; mcenv = genv /@ "  :macros";
+   return mcenv /@ %S<<(" :typexpander: ",nm);
+}
+
+function clike_dbg(l,a, msg)
+  if((^clike_debug_level)>l) println(%S<<(a,"   ",msg))

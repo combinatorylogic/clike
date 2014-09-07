@@ -1,0 +1,68 @@
+///// A simple cc-like standalone compiler front-end
+#(ctime `(usedll ,(alet x (shashget (getfuncenv) 'CLikeCore)
+	              (if x x 'CLikeCore))))
+
+--------------------------
+
+
+function clike_compile_files(mdname, fls)
+{
+  nollvm = ^clike_no_llvm;
+  mdl = if(nollvm) [] else llvm_init_module(mdname);
+  if(nollvm) clike_outfile_v := %io-open-write(%S<<(mdname,".x"));
+  env = clike_global_env();
+  %read-int-eval('define'('clike-current-env',#`(quote ,env)));
+  %read-int-eval('define'('clike-current-llvm-env',#`(quote ,mdl)));
+  iter fls do {
+     println(%S<<("Compiling: ",fls));
+     match fls with
+       c(fn) -> clike_compile_file(mdl,env,fn)
+     | x(fn) -> clike_bypass_file(mdl,env,fn)
+  };
+  if(not(nollvm)) llvm_save(mdl, %S<<(mdname,".o")) else
+    %io-wclose(^clike_outfile_v);
+  println("Done.");
+}
+  
+
+function main()
+collector(fadd,fget) {
+ %read-int-eval(#'(n.module clikeccrepl dll));
+ mname = mkref("test");
+ do loop(a = %a->l( %*CMDLINE* )) {
+    match a with
+      ["/out";mdlname;@rest] -> {mname := mdlname;loop(rest)}
+    | ["/d";dllname;@rest] -> {%read-compile-eval('usedll'(%Sm<<(dllname)));
+                               loop(rest);}
+    | ["/o+";@rest] -> { %llvm-optimise := true; loop(rest)}
+    | ["/o-";@rest] -> { %llvm-optimise := []; loop(rest)}
+    | ["/dbg";levl;@rest] -> {clike_debug_level := %S->N(levl); loop(rest)}
+    | ["/s";hlfile;@rest] -> {%read-compile-eval('hlevl-file'(hlfile)); loop(rest)}
+    | ["/a";alfile;@rest] -> {%read-compile-eval('include'(alfile)); loop(rest)}
+    | ["/c";@rest] -> {llvm_no_engine := true;loop(rest)}
+    | ["/i";@rest] -> {clike_no_llvm := true;loop(rest)}
+    | ["/x";fname;@rest] -> {fadd('x'(fname));loop(rest)}
+    | [srcfile;@rest] -> {fadd('c'(srcfile));loop(rest)}
+    | [] -> {
+       fls = fget();
+       if(not(fls)) {
+         iter(println,
+               ["Usage: clikecc [option...] file.c...";
+                "Options:";
+                "   /out <modulename>   : save bitcode to a given module";
+                "   /d   <dllname>      : load a given MBase dll";
+                "   /s   <srcfile>      : load a given PFront source file";
+                "   /a   <srcfile>      : load a given MBase source file";
+                "   /x   <file>         : compile in an intermediate LLVM code";
+                "   /i                  : save an output in an intermediate format";
+                "   /c                  : disable JIT engine and reflection";
+                "   /o+                 : enable LLVM optimisation";
+                "   /o-                 : disable LLVM optimisation";
+                "   /dbg <level>        : enable debugging output (1-8)"]);
+         quit();
+       } 
+         else clike_compile_files(^mname,fls);
+    }
+ }
+}
+

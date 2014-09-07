@@ -1,0 +1,73 @@
+
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+%\usepackage[T1]{fontenc}
+%\usepackage{textcomp}
+
+\usepackage{calc}
+\usepackage{ifthen}
+\usepackage{tikz}
+\usepackage{hyperref}
+\usetikzlibrary{backgrounds,fit,decorations.pathreplacing}  % TikZ libraries
+
+
+\usepackage{graphicx}
+
+\usepackage{alltt}
+\usepackage{rotating}
+
+\newcommand{\colobox}[1]{
+\begin{tikzpicture}
+[execute at end picture=%
+{
+\begin{pgfonlayer}{background}
+\path[fill=black!10,thick,draw=black!40,rounded corners=0.8mm]
+(current bounding box.south west) rectangle
+(current bounding box.north east);
+\end{pgfonlayer}
+}]
+\node (box) {
+\begin{minipage}{\textwidth}
+#1
+\end{minipage}
+};
+\end{tikzpicture}\\}
+
+\newcommand{\commentbox}[1]{\colobox{#1}}
+
+\newcommand{\lspspc}{{\color{white}{\tt{\_}}}}
+\newcommand{\lsplp}{(}
+\newcommand{\lsprp}{)}
+
+\newcommand{\docstring}[1]{\sl #1}
+\newcommand{\docentry}[1]{\sl #1}
+
+\newenvironment{pfcodeblock}[1]{}{}
+\newcommand{\pfcodeblockbegin}{}
+\newcommand{\pfcodeblockend}{}
+
+
+\definecolor{light-gray}{gray}{0.5}  
+
+\title{CLike Compiler}
+\author{Meta Alternative Ltd.}
+\date{2008-2011}
+
+\begin{document}
+\setlength{\parindent}{0pt} 
+
+\maketitle
+
+\tableofcontents
+
+\newpage
+
+\input clike-ast
+\input clike-parser
+\input clike-expand
+\input clike-types-utils
+\input clike-types
+\input clike-compiler
+\input clike-compiler-top
+
+\end{document}

@@ -1,0 +1,610 @@
+%literate:
+
+\section{Compiler}
+
+\pfcode{
+///\commentbox{Compiles a CLike type into LLVM type}\\
+function clike_c_type(env, tp)
+         clike_c_type0(env, tp, [])
+
+///\commentbox{An actual implementation:}\\
+function clike_c_type0(env, tp, arrp)
+  visit:clike2(lltype: tp) {
+   deep lltype {
+     struct -> 'struct'((if(nm) car(nm) else []),@ts)
+   | integer -> node
+   | real -> 'float'(rtype)
+   | alias -> clike_c_type(env, clike_env_unitype(env, node))
+   | structref -> node
+   | ptr -> ( match t with
+                void() -> 'pointer'('integer'('i8'))
+              | else -> 'pointer'(t) )
+   | fun -> if(va) 'varfunction'(ret,@args) else 'function'(ret,@args)
+   | array -> if(arrp) 'array'(dims, t) else 'pointer'(t)
+   | void -> node
+   | else -> ccerror('CLIKE:TODO'(node))
+  };
+  once llstrelt : clike_c_type0(env, t, true);
+ }
+}
+
+\pfcode{
+///\commentbox{The same as above, to be used after an array decay pass}\\
+function clike_ca_type(env, tp)
+         clike_c_type0(env, tp, true)
+}
+
+\pfcode{
+///\commentbox{Compile a CLike constant literal into an LLVM constant}\\
+function clike_c_const(env, c, nt)
+    visit:clike(llconst: c)
+    { once llconst {
+            integer -> 'val'('integer'(v, itype))
+         |  real -> 'val'('float'(v, rtype))
+         |  null -> 'val'('null'(clike_c_type(env, nt)))
+         |  zero -> 'val'('zero'(clike_c_type(env, t)))
+         |  constarray -> {
+             et = clike_array_elt_type(nt);
+             'val'('array'(
+                 clike_c_type(env, et),
+                @map elts do cadr(clike_c_const(env, elts, et))))
+            }
+         |  else -> ccerror('CLIKE:NOT-IMPLEMENTED-YET'(c))
+        }}
+}
+
+\pfcode{
+///\commentbox{Compile a type conversion into LLVM}\\
+function clike_convop_llvm(tto, tfrom)
+    match tfrom:tto with
+       integer(i1):integer(i2) -> {
+          if(i1 === i2) [] else
+          { cparses(s) = %S->N(%list->string(cdr(%symbol->list(s))));
+            n1 = cparses(i1);n2=cparses(i2);
+            if(n1>n2) 'Trunc' else 'ZExt' // TODO: do something with signs
+          }}
+     | real('float'):real('double') -> 'FPExt'
+     | real('double'):real('float') -> 'FPTrunc'
+     | real(r):integer(i) -> if(clike_signed(tto)) 'FPToSI'
+                             else 'FPToUI'
+     | integer(i):real(r) -> if(clike_signed(tfrom)) 'SIToFP'
+                             else 'UIToFP'
+     | ptr(p1):ptr(p2) -> if(clike_type_iso(p1,p2)) [] else 'BitCast'
+     | array(t1,@_):ptr(t2) -> if(clike_type_iso(t1,t2)) [] else 'BitCast'
+     | ptr(t1):array(t2,@_) -> if(clike_type_iso(t1,t2)) [] else 'BitCast'
+     | else -> ccerror('CLIKE:UNSUPPORTED-CAST'(tfrom,tto))
+}
+
+\pfcode{
+///\commentbox{Compile an unary operation into LLVM}\\
+function clike_c_unop(env, op, e)
+ case op {
+    'minus' -> 
+       'binary'('Sub',car(e):'val'('zero'(clike_c_type(env, car(e)))),e)
+  | 'not' -> 'icmp'('EQ',e,car(e):'val'('zero'(clike_c_type(env, car(e)))))
+ }
+}
+
+\pfcode{
+///\commentbox{Compiles a binary opeartion into LLVM}\\
+function clike_binop_llvm(op, tp, l, r)
+{ fp = match tp with real(_) -> true | else -> nil;
+  trap() = ccerror('CLIKE:WRONG-TYPE'(tp));
+  llop = case op {
+            'add' -> if(fp) 'FAdd' else 'Add'
+          | 'sub' -> if(fp) 'FSub' else 'Sub'
+          | 'mul' -> if(fp) 'FMul' else 'Mul'
+          | 'div' -> if(fp) 'FDiv' else {
+                        if(clike_signed(tp)) 'SDiv' else 'UDiv'
+                     }
+          | 'rem' -> if(fp) 'FRem' else {
+                        if(clike_signed(tp)) 'SRem' else 'URem'
+                     }
+          | 'shl' -> if(fp) trap() else 'Shl'
+          | 'shr' -> if(fp) trap() else {if(clike_signed(tp)) 'AShr' else 'LShr'}
+          | 'and' -> if(fp) trap() else 'And'
+          | 'or' -> if(fp) trap() else 'Or'
+          | 'xor' -> if(fp) trap() else 'Xor'
+         };
+  return 'binary'(llop, l, r)}
+}
+
+\pfcode{
+///\commentbox{Compile a comarison operation}\\
+function clike_compop_llvm(op, tp, l, r)
+{
+  fp = match tp with real(_) -> true | else -> nil;
+  sig = clike_signed(tp);
+  llop = if(not(fp))
+          case op {
+            'eq' -> 'EQ'
+          | 'ne' -> 'NE'
+          | 'gt' -> if(sig) 'SGT' else 'UGT'
+          | 'ge' -> if(sig) 'SGE' else 'UGE'
+          | 'lt' -> if(sig) 'SLT' else 'ULT'
+          | 'le' -> if(sig) 'SLE' else 'ULE'
+          } else case op {
+            'eq' -> 'OEQ'
+          | 'ne' -> 'ONE'
+          | 'gt' -> 'OGT'
+          | 'ge' -> 'OGE'
+          | 'lt' -> 'OLT'
+          | 'le' -> 'OLE'
+          };
+  if(fp) return 'fcmp'(llop, l, r) else
+         return 'icmp'(llop, l, r)
+}
+}
+
+\pfcode{
+/***\commentbox{A helper function which returns a constant "1" 
+     of a given numeric type}\\***/
+function clike_c_one(tp)
+ visit:clike2(lltype:tp) { deep lltype {
+    integer -> 'val'('integer'(1,itype))
+  | real ->    'val'('float'("1.0",rtype))
+  | ptr  ->    'val'('integer'(1,'i32'))
+  | else ->    ccerror('CLIKE:PREPOSTERR'(tp))
+ }}
+}
+
+\pfcode{
+///\commentbox{A helper function which translates a prefix or a postfix operation}\\
+function clike_c_prepost(op, tp, varnm)
+{
+  bop =  case op { 'inc' | '++' -> 'Add'
+                |  'dec' | '--' -> 'Sub'};
+  'storevar'(varnm, tp : 'binary'(bop, tp : 'loadvar'(varnm), tp : clike_c_one(tp)))
+}
+}
+
+\pfcode{
+///\commentbox{A helper function: fix a break target}\\
+function clike_fix_break(c, tgt)
+  visit:clike3(llstmt2: c)
+    { deep llstmt2 { break -> 'br_label'(tgt) | else -> node }}
+}
+
+
+\pfcode{
+///\commentbox{An integer zero constant}\\
+define clike_zero = '_':'val'('integer'(0));
+}
+
+\pfcode{
+function clike_array_access(ar,idxs,node)
+      match car(ar) with
+           arg(t) -> 
+              t: 'getelementptr'(ar,@idxs)
+         | ptr(array(t,@_)) ->
+              'ptr'(t): 'getelementptr'(ar,clike_zero,@idxs)
+         | ptr(ptr(t)) ->
+              'ptr'(t): 'getelementptr'('ptr'(t):'load'(ar),@idxs)
+         | else -> ccerror('CLIKE:ARRAY-ACCESS-TYPE'(node))
+
+function clike_elt_access(e,fldnm,node)
+      match car(e) with
+           arg(struct(@_)) ->
+              '_': 'getelementptr'(e,'_':
+                       'val'('integer'(
+                               clike_fieldnumber(car(e), fldnm))))
+         | ptr(struct(@_)) ->
+              '_': 'getelementptr'(e,clike_zero,'_':
+                      'val'('integer'(
+                             clike_fieldnumber(car(e), fldnm))))
+         | else -> ccerror('CLIKE:FIELD-ACCESS-TYPE'(node))
+}
+
+\subsection{A compilation pass: clike2$\to$clike3}
+
+\pfcode{
+function clike_precompile(env, c)
+  visit:clike2(llcode: c)
+  { deep llcode {
+        begin -> node
+      | label -> 'begin'('br_label'(lbl),'label'(lbl))
+      | vardef -> {
+            match tp with
+               array(eltt,@_) -> { // perform a decay immediately
+                ntp = 'ptr'(eltt);
+                name0 = gensym(); name1=gensym();
+                'begin'(
+                  'set'(name0, clike_make_ref_type(tp) :
+                                   'alloca'(clike_ca_type(env, tp))),
+                  'set'(name, clike_make_ref_type(ntp) :
+                                   'alloca'(clike_c_type(env, ntp))),
+                  'store'('val'('var'(name)), clike_make_ref_type(ntp) :
+                                   'getelementptr'('_':
+                                        'val'('var'(name0)),
+                                            clike_zero, clike_zero)))
+               }
+             | else -> {
+                'set'(name, clike_make_ref_type(tp) :
+                                   'alloca'(clike_c_type(env, tp)))
+               }
+        }
+      | set -> {
+         match cdr(l) with
+           val(vv) -> 'store'('val'(vv), e)
+         | else -> {
+           ptr = gensym();
+           'begin'('set'(ptr, l),
+                   'store'('val'('var'(ptr)), e))}}
+      | expr -> {
+          match car(e) with
+            ['void'] -> 'set'("",e)
+          | else -> {
+            dummy = gensym();
+            'set'(dummy, e)}
+        }
+      | return -> 'ret'(e)
+      | vreturn -> 'vret'()
+      | goto -> 'br_label'(lbl)
+      | do -> symbols(cnt, rep) {
+         'begin'(
+             'br_label'(rep),
+          'label'(rep),
+             clike_fix_break(body,cnt),
+             'br'(cnd,rep,cnt),
+          'label'(cnt))
+        }
+      | while -> symbols(cnt, nxt, rep) {
+         'begin'(
+             'br_label'(rep),
+          'label'(rep), 
+             'br'(cnd,nxt,cnt),
+          'label'(nxt),
+             clike_fix_break(body,cnt),
+             'br_label'(rep),
+          'label'(cnt))
+        }
+      | for -> symbols(stepdummy, cnt, nxt, rep) {
+          'begin'(
+             @init,
+             'br_label'(rep),
+           'label'(rep),
+             'br'(cnd, nxt, cnt),
+           'label'(nxt),
+             clike_fix_break(body,cnt),
+             step,
+             'br_label'(rep),
+           'label'(cnt)
+          )}
+      | if3 -> symbols(l1,l2,cnt) {
+          'begin'(
+               'br'(e,l1,l2),
+             'label'(l1),
+               tr,
+               'br_label'(cnt),
+             'label'(l2),
+               fl,
+               'br_label'(cnt),
+             'label'(cnt)
+           )}
+      | if2 -> symbols(l1,cnt) {
+          'begin'(
+               'br'(e,l1,cnt),
+             'label'(l1),
+               tr,
+               'br_label'(cnt),
+             'label'(cnt)
+           )}
+      | switch -> symbols(l1,cnt,exit) {
+          lbls = map o in opts do gensym();
+          oz = collector(la, lg) {
+                  do lbloop(o = opts, l = lbls) {
+		    if(o) {la([car(o);car(l);if(cdr(l)) cadr(l) else exit]);
+		           lbloop(cdr(o),cdr(l))}
+	          };
+		  lg()
+	       };
+          'begin'('switch'(e,cnt,map [[c;action];l;nxtl] in oz do
+                      [cadr(clike_c_const(env, c, car(e)));l]),
+             @map append [[c;action];l;nxtl] in oz do {
+              ['label'(l);
+                 clike_fix_break(action,exit);
+                 'br_label'(nxtl)
+              ]},
+            'label'(cnt),
+             @dflt,
+             'br_label'(exit),
+            'label'(exit)
+          )}
+      | passexpr -> ccerror('CLIKE:SHOULD-NOT-BE-HERE'(node))
+      | break -> 'break'()
+      | else -> ccerror('CLIKE:NOT-IMPLEMENTED-YET'(node))
+     };
+     deep lloexpr {
+        call -> 'call'(id,@args)
+      | callptr -> 'callptr'(fn,@args)
+      | stdcallpfx -> {match cdr(e) with
+                          'callptr'(fn,@args) -> 'callptrstd'(fn,@args)
+                        | else -> e}
+      | bin -> clike_binop_llvm(op,car(l), l, r)
+      | compop -> clike_compop_llvm(op, car(l), l, r)
+      | un -> clike_c_unop(env, op, e)
+      | tri -> symbols(tmp, l1, l2, next) {
+          tp = car(tr);
+          'liftstatements'('begin'('set'(tmp, clike_make_ref_type(tp) :
+                                              'alloca'(clike_c_type(env, tp))),
+                                   'br'(cnd, l1, l2),
+                                 'label'(l1),
+                                   'storevar'(tmp, tr),
+                                   'br_label'(next),
+                                 'label'(l2),
+                                   'storevar'(tmp, fl),
+                                   'br_label'(next),
+                                 'label'(next)), tp : 'loadvar'(tmp))}
+      | typecast -> {cvop = clike_convop_llvm(t, car(e));
+                     if(cvop)
+                        'convop'(cvop, e, 
+                                  clike_c_type(env, t))
+                     else cdr(e) }
+      | pre -> symbols(tmp) {
+          tp = if(vtyp) clike_deref_type(car(vtyp)) else '_';
+          match cdr(v) with
+             val(var(vv)) ->
+              'liftstatements'('begin'(
+                                  clike_c_prepost(op, tp, vv)),
+                                tp : 'loadvar'(vv))
+           | else ->
+              'liftstatements'('begin'('set'(tmp, v),
+                                  clike_c_prepost(op, tp, tmp)),
+                                tp : 'loadvar'(tmp))}
+      | post -> symbols(tmp, tstor) {
+          tp = if(vtyp) clike_deref_type(car(vtyp)) else '_';
+          match cdr(v) with
+             val(var(vv)) ->
+              'liftstatements'('begin'(
+                                   'set'(tstor,tp : 'loadvar'(vv)),
+                                   clike_c_prepost(op, tp, vv)),
+                              tp : 'val'('var'(tstor)))
+           | else ->
+              'liftstatements'('begin'('set'(tmp,v),
+                                   'set'(tstor,tp : 'loadvar'(tmp)),
+                                   clike_c_prepost(op, tp, tmp)),
+                              tp : 'val'('var'(tstor)))}
+      | inblock -> 'liftstatements'(c, r)
+      | eset -> symbols(tmp, tstor) {
+          tp = car(v);
+          match cdr(v) with
+            val(vv) ->
+               'liftstatements'('begin'(
+                                   'set'(tstor,e),
+                                   'store'('val'(vv), tp : 'val'('var'(tstor)))),
+                              tp : 'val'('var'(tstor)))
+          | else ->
+               'liftstatements'('begin'('set'(tmp,v),
+                                   'set'(tstor,e),
+                                   'storevar'(tmp, tp : 'val'('var'(tstor)))),
+                              tp : 'val'('var'(tstor)))}
+      | modop -> symbols(tmp, tstor) {
+          tp = car(l);
+          'liftstatements'('begin'('set'(tstor, l),
+                                   'set'(tmp, tp :
+                                      clike_binop_llvm(op, tp, tp:'load'(l),
+                                                         r)),
+                                   'storevar'(tstor,tp:'val'('var'(tmp)))),
+                                tp : 'val'('var'(tmp)))
+        }
+      | logand -> symbols(reslt, cnt) {
+          'liftstatements'('begin'('set'(reslt, '_':
+                                      'alloca'('integer'('i32'))),
+                                   @map append es do symbols(tv, nxt1) {[
+                                      'set'(tv, es);
+                                      'storevar'(reslt, '_':'val'('var'(tv)));
+                                      'br'('_':'val'('var'(tv)), nxt1, cnt);
+                                      'label'(nxt1)
+                                     ]},
+                                   'br_label'(cnt),
+                                   'label'(cnt)
+                                   ),'_':'loadvar'(reslt))}
+      | logor -> symbols(reslt, cnt) {
+          'liftstatements'('begin'('set'(reslt, '_':
+                                      'alloca'('integer'('i32'))),
+                                   @map append es do symbols(tv, nxt1) {[
+                                      'set'(tv, es);
+                                      'storevar'(reslt, '_':'val'('var'(tv)));
+                                      'br'('_':'val'('var'(tv)), cnt, nxt1);
+                                      'label'(nxt1)
+                                     ]},
+                                   'br_label'(cnt),
+                                   'label'(cnt)
+                                   ),'_':'loadvar'(reslt))}
+      | const -> clike_c_const(env, c, caar(stack))
+      | globstring -> 'stringtmp'(s)
+      | var -> 'loadvar'(nm)
+      | arg -> 'val'('var'(nm))
+      | glob -> 'load'('_':'val'('global'(nm)))
+      | globfun -> 'load'('_':'val'('globalfun'(nm)))
+      | array -> 'load'(clike_array_access(ar,idxs,node))
+      | ref -> cdr(e)
+      | deref -> 'load'(e)
+      | getelt -> 'load'(clike_elt_access(e,fldnm,node))
+      | sizeof -> 'val'('sizeof'(clike_c_type(env, t)))
+     };
+     // lvalues are different, they are compiled into a code which gives a
+     //  pointer instead of a value
+     deep olvalue {
+        var -> 'val'('var'(nm)) // all local vars are pointers in llvm
+      | arg -> 'val'('var'(nm))
+      | glob -> 'val'('global'(nm))
+      | globfun -> 'val'('globalfun'(nm))
+      | array -> cdr(clike_array_access(ar,idxs,node))
+      | deref -> cdr(e)
+      | getelt -> cdr(clike_elt_access(e,fldnm,node))
+     };
+  }
+}
+
+\pfcode{
+///\commentbox{A helper compilation pass: gets rid of unnecessary (and impossible) redefinitions. In addition, 'loadvar' sugar is expanded.}\\
+function clike_fix_sets(c)
+{  ren = mkhash();
+   visit:clike3(llstmt2: c)
+   {
+     deep llstmt2 {
+        set -> {
+           match cdr(e) with
+              'val'(v) -> {
+                 ren /! nm <- v;
+                 'nop'()
+              }
+            | else -> node
+        }
+      | storevar -> {
+           chk = ren/@ptr;
+           vv = if(chk) chk else 'var'(ptr);
+           return 'store'('val'(vv),e)
+        }
+      | else -> node
+     };
+     deep llexpr1 {
+      | loadvar -> {
+          chk = ren /@ id;
+          v = if(chk) chk else 'var'(id);
+          return 'load'('_':'val'(v))
+        }
+      | else -> node
+     };
+     deep llval {
+        var -> {
+          chk = ren /@ nm;
+          if(chk) chk else node
+        }
+      | else -> node
+     };
+   }
+}
+}
+
+\pfcode{
+///\commentbox{A helper function for a next compilation pass: flattens an expression tree, leaving topmost expression intact}\\
+function clike_lift_2(add, expr)
+  visit:clike3(llexpr1_deref: expr) {
+     llexpr1 as llexpr1_deref {
+        | liftstatements -> cdr(e)
+        | else -> node
+     };
+     once llstmt2 : forall add(clike_lift_1(node));
+     deep llexpr1 {
+        val -> node
+      | liftstatements -> cdr(e)
+      | else -> {
+          newnm = gensym();
+          add('set'(newnm,'_':clike_lift_2(add, node)));
+          return 'val'('var'(newnm))
+        }
+     }
+  }
+
+///\commentbox{The same as above, but the topmost expression is also lifted as a variable binding}\\
+function clike_lift_3(add, expr)
+  visit:clike3(llexpr1: expr) {
+     once llstmt2 : forall add(clike_lift_1(node));
+     deep llexpr1 {
+        val -> node
+      | liftstatements -> cdr(e)
+      | else -> {
+          newnm = gensym();
+          add('set'(newnm,'_':clike_lift_2(add, node)));
+          return 'val'('var'(newnm))
+        }}}
+
+///\commentbox{A compilation pass: flatten all the expression trees}\\
+function clike_lift_1(code)
+  collector(add, get) {
+    do loop(c = code)
+      iter:clike3(llstmt2: c) { once llstmt2 {
+         begin -> iter es do loop(es)
+       | set -> {
+         add(visit:clike3(llstmt2: node) {
+                once llexpr1 : forall clike_lift_2(add, node)
+             })}
+       | else -> {
+         add(visit:clike3(llstmt2: node) {
+                once llexpr1 : forall clike_lift_3(add, node)
+             })
+       }
+      }};
+    return 'begin'(@get())
+  }
+}
+ 
+\pfcode{
+///\commentbox{A helper compilation pass: remove 'val' nodes, remove the remaining types annotations, flatten nested 'begin' sequences, fail on any remaining breaks}\\
+function clike_cleanup(c)
+ collector(aladd, alget) {
+  rest = 
+   visit:clike3(llstmt2: c)
+    { deep llexpr2 : e; 
+      deep llexpr1 { val -> v 
+                   | liftstatements -> ccerror('CLIKE:BROKEN-PASS'(node))
+                   | else -> node };
+      deep llstmt2 {
+          begin -> map append es do es
+       |  break -> ccerror('CLIKE:BREAK-OUT-OF-CONTEXT'())
+       |  nop -> []
+       |  set -> {
+            match e with
+               'alloca':_ -> {aladd(node);[]}
+             | stringtmp(s) -> ['setstring'(nm,s)]
+             | else -> [node]
+          }
+       |  else -> [node]
+      };
+    };
+  return alget()::rest;
+  }
+}
+
+\pfcode{
+function clike_rettype_voidp(t)
+  match t with
+     void() -> true
+   | else -> []
+}
+
+\pfcode{
+/***\commentbox{A final compilation pass: separate the basic blocks. 
+    After this pass, the code is ready to be translated into LLVM IR.}\\
+***/
+function clike_basicblocks(rettype, code)
+  collector(badd, bget) {
+    voidp = clike_rettype_voidp(rettype);
+    nextbblock(name) = collector(add, get) { add:fun() {name:get()} };
+    do loop(c = code, bb = nextbblock("entry"), empt = true) {
+       if(%null?(c)) {
+          if(not(%null?(bb))) { // if we're here, a return must be injected
+             if(not(voidp)) {
+                 (car(bb))('ret'('zero'(rettype)));
+                 badd((cdr(bb))());
+             } else { (car(bb))('vret'());
+                      badd((cdr(bb))()); }
+          }
+       }
+       else case caar(c) {
+          'br' | 'br_label' | 'switch' | 'indirectbr' | 'ret' | 'vret' ->
+            {
+              if(bb) {
+                (car(bb))(car(c));
+                badd((cdr(bb))());
+              };
+              loop(cdr(c),[],true)
+            }
+        | 'label' -> {
+              loop(cdr(c), nextbblock(%S<<(cadr(car(c)))), true)
+          }
+        | else -> {
+              if(%null?(bb)) { // Unreacheable code
+	         loop(c, nextbblock(%S<<(gensym())), true)
+	      } else {
+                (car(bb))(car(c));
+                loop(cdr(c),bb,[])
+	      }
+        }
+       }
+    };
+    return bget();
+  }
+}
