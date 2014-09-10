@@ -14,6 +14,8 @@ but not implemented yet.
 
  Building:
 
+ MBase 1.0.2 is required: https://github.com/combinatorylogic/mbase
+
  The only supported environment currently is Linux on x86 or x86_64, 
  with Mono > 3.0.
 
