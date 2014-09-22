@@ -25,7 +25,7 @@ clikecc.exe: CLikeCore.dll
 clikescc.exe: CLikeSCore.dll
 	$(PFRONT) /c clikescc ./clike/clike-cc-standalone.hl
 
-doc/doc.pdf: clikecc.exe
+doc/doc.pdf: clikescc.exe
 	dot -Tps doc/clike.dot > doc/clike.eps
 	epstopdf doc/clike.eps -o doc/clike.pdf
 	cd doc; pdflatex doc.tex
