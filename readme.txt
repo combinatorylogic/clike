@@ -15,14 +15,20 @@ but not implemented yet.
  Building:
 
  MBase 1.0.2 is required: https://github.com/combinatorylogic/mbase
+ Make sure MBase DLLs are installed into the GAC.
 
  The only supported environment currently is Linux on x86 or x86_64, 
  with Mono > 3.0.
 
  Python 2.7, Clang (3.5) and cindex are required for building llvm-wrapper
  Make sure PYTHONPATH points to $CLANG_SOURCE/bindings/python.
+ If Python bindings are not available, a cached version will be used
+  (currently provided for LLVM 3.5 and LLVM 3.6.0svn).
 
  pdflatex and graphviz are required for building documentation.
+
+ Linux on ARM is not currently supported. If you want to try it anyway, make sure
+LLVM libraries are built with -fPIC.
 
  Clike code layout is following:
 

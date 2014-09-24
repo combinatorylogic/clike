@@ -1,5 +1,6 @@
 PFRONT := pfront
 MONO := mono
+LLI := lli
 PWD = $(shell pwd)
 
 all: clikecc.exe clikescc.exe doc/doc.pdf
@@ -34,3 +35,6 @@ doc/doc.pdf: clikescc.exe
 test: clikecc.exe
 	LD_LIBRARY_PATH=$(PWD)/llvm-wrapper/lib/:$(LD_LIBRARY_PATH) $(MONO) clikecc.exe tests/tests.c > tests/tests.out
 	diff tests/tests.out tests/tests.ref
+	LD_LIBRARY_PATH=$(PWD)/llvm-wrapper/lib/:$(LD_LIBRARY_PATH) $(MONO) clikecc.exe /out syntax tests/syntax.c
+	$(LLI) syntax.o > tests/syntax.out
+	diff tests/syntax.out tests/syntax.ref

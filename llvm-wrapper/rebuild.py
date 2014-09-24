@@ -4,6 +4,8 @@
 import sys
 import clang.cindex
 
+fcache = {}
+
 def sanitise(tp):
     return tp.replace("[]","*")
 
@@ -18,10 +20,13 @@ def find_arguments(args):
 
 def find_functions(node):
     if node.kind == clang.cindex.CursorKind.FUNCTION_DECL:
-        if node.spelling.startswith('LLVM'):
-            print '   ("%s" "%s" (' % (node.spelling, sanitise(node.result_type.spelling))
-            find_arguments(node.get_arguments())
-            print '   ))'
+        nm = node.spelling
+        if not(nm in fcache):
+            fcache[nm] = nm
+            if node.spelling.startswith('LLVM'):
+                print '   ("%s" "%s" (' % (node.spelling, sanitise(node.result_type.spelling))
+                find_arguments(node.get_arguments())
+                print '   ))'
     else:
         for c in node.get_children():
             find_functions(c)
