@@ -149,6 +149,11 @@ function clike_expand_core(tl)
    }
 }
 
+function clike_expand_core_expr(e)
+  cadr(clike_expand_core('xxexpr'(e)));
+
+function clike_expand_core_code(e)
+  cadr(clike_expand_core('xxcode'(e)));
 
 ///\commentbox{A shortcut for defining Clike macros in the default macro environment}\\
 #(macro clike_defmacro (name args . body)

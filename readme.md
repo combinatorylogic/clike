@@ -28,7 +28,7 @@ void test(int a, float b) {
 
 ## What is it for?
 
- C is an ideal target for compiling higher level languages. It's got optimising compilers, it is low level enough to handle a very wide variety of semantics. But often a semantic gap between a high level language and C is huge, and translation is not as trivial and straightforward. CLike can bridge this gap in the very same way as MBase addresses the eDSL desing in general - by introducing rich metaprogamming capabilities and comprehensive reflection.
+ C is an ideal target for compiling higher level languages. It's got optimising compilers, it is low level enough to handle a very wide variety of semantics. But often a semantic gap between a high level language and C is huge, and translation is not that trivial and straightforward. CLike can bridge this gap in the very same way as MBase addresses the eDSL design in general - by introducing rich metaprogamming capabilities and comprehensive reflection.
 
  This way languages can be translated incrementally, via building new semantic features on top of an existing target language, instead of a classic compilation pipeline. Many interesting tricks are possible when growing languages this way, from mixing different languages together to allowing transparent fallbacks to the low level where it is needed. See the PFront language in MBase as an extreme example of this technique.
 

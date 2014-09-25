@@ -24,6 +24,9 @@ ast clike {
      // For storing intermediate LLVM code:
      | xfunc(lltype:ret, topident:name, bool:va, . *llfuncarg:args)
      | xglobal(lltype:tp, topident:name)
+     // Bypass entries
+     | xxexpr(llexpr:e)
+     | xxcode(llcode:c)
      ;
 
    topident is ident:v; // a dummy node

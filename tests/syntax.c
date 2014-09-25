@@ -97,10 +97,27 @@ clike macro tostring {
             .clike-expr `collect_str(&builder, \e\)`
      |  'integer'(itype) -> .clike-expr ` itoa_i64 ( &builder, \e\ ) `
      |  'real'(rtype) -> .clike-expr ` ftoa_double ( &builder, \e\ ) `
+     |  'struct'(nm, @elts) -> symbols(strct) {
+            fillstruct = 'begin'(
+               @map append [fld;ftp] in elts do 
+                  [
+                     {fldnm = 'const'('string'(%S<<(fld,"="))); .clike-code `collect_str(&builder, \fldnm\ );`};
+                     'expr'('typedmacro'('tostring','expr'('getelt'('var'(strct), fld))));
+                     .clike-code `collect_str(&builder, ";");`
+                  ]
+            );
+            strnm = 'const'('string'(if(nm) %S<<("@[", car(nm), " ") else "@[... "));
+            clike_expand_core_expr(
+               .clike-expr `inblock {collect_str(&builder, \strnm\ );
+                                  var \strct\ = ::expr \e\ ;
+                                  ::code \fillstruct\;
+                                  (collect_str(&builder, "]"));}`)
+        }
         // We can do a lot of interesting things here: implement pretty printers
-        // for structures and arrays, implement an extensible system of type-dependent printers,
-        // etc., but for the sake of simplicity we'll stick to simple types here
-     |  else -> .clike-expr `collect_str(&builder, "<type-not-supported-yet>")`
+        // for recursive structures and arrays, implement an extensible system of
+        // type-dependent printers, etc., but for the sake of simplicity we'll 
+        // stick to simple types here.
+     |  else -> {println(typeof_e); .clike-expr `collect_str(&builder, "<type-not-supported-yet>")`}
   }
 }
 
@@ -181,6 +198,21 @@ void demo1()
    
    // String interpolation demo
    puts(£"A = $(a), B = $(b), A+B=$(a+b), 5/3 = $(5.0/3.0), GS=$(gs)");
+
+
+   struct _abc {
+      int32 f1;
+      int8 f2;
+      int8* s;
+      struct {
+        int32 x;
+      } inner;
+   } test;
+   test.f1 = 1;
+   test.f2 = 2;
+   test.s = "TEST";
+   test.inner.x = 10;
+   puts(£"Struct test: $(test)\n");
 }
 
 
