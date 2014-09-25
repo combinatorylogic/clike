@@ -102,16 +102,17 @@ clike macro tostring {
                @map append [fld;ftp] in elts do 
                   [
                      {fldnm = 'const'('string'(%S<<(fld,"="))); .clike-code `collect_str(&builder, \fldnm\ );`};
-                     'expr'('typedmacro'('tostring','expr'('getelt'('var'(strct), fld))));
+                     'expr'('typedmacro'('tostring','expr'('getelt'('deref'('var'(strct)), fld))));
                      .clike-code `collect_str(&builder, ";");`
                   ]
             );
             strnm = 'const'('string'(if(nm) %S<<("@[", car(nm), " ") else "@[... "));
             clike_expand_core_expr(
                .clike-expr `inblock {collect_str(&builder, \strnm\ );
-                                  var \strct\ = ::expr \e\ ;
+                                  var \strct\ = &(::expr \e\) ;
                                   ::code \fillstruct\;
-                                  (collect_str(&builder, "]"));}`)
+                                  collect_str(&builder, "]");
+                                  (0);}`)
         }
         // We can do a lot of interesting things here: implement pretty printers
         // for recursive structures and arrays, implement an extensible system of
@@ -212,7 +213,7 @@ void demo1()
    test.f2 = 2;
    test.s = "TEST";
    test.inner.x = 10;
-   puts(£"Struct test: $(test)\n");
+   puts(£"Struct test: $(test)");
 }
 
 

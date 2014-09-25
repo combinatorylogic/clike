@@ -1,3 +1,4 @@
 4,16,12
 74128
 A = 200, B = 40, A+B=240, 5/3 = 1.66667, GS=String
+Struct test: @[_abc f1=1;f2=2;s=TEST;inner=@[... x=10;];]
