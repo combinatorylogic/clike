@@ -6,7 +6,7 @@
 */
 
 
-ast llvm_ir {
+ast ir0 {
 
   irstructel is (irtype:t, irval:v);
 
@@ -28,13 +28,13 @@ ast llvm_ir {
         | null(irtype:t)
         | integer(int:v, .*ident:itp)
         | float(float:v, .*ident:ftp)
-        | struct(. *irstructel:elts)
-        | array(irtype:t, . *irval:elts)
-        | vector(. *irval:elts)
-        | zero(irtype:t)
-        | undef(irtype:t)
-        | blockaddress(ident:fn, ident:blk)
-        | var(ident:nm)
+	| struct(. *irstructel:elts)
+	| array(irtype:t, . *irval:elts)
+	| vector(. *irval:elts)
+	| zero(irtype:t)
+	| undef(irtype:t)
+	| blockaddress(ident:fn, ident:blk)
+	| var(ident:nm)
         | global(ident:nm)
         | globalfun(ident:nm)
         | sizeof(irtype:t)
@@ -51,7 +51,7 @@ ast llvm_ir {
 	 | struct(ident:nm, . *irtype:elts)
          | structref(ident:nm)
 	 | packed(ident:nm, . *irtype:elts)
-	 | pointer(irtype:t, .*aspace:spc)
+	 | pointer(irtype:t,.*aspace:spc)
 	 | vector(int:n, irtype:t)
          | alias(ident:id)
 	 ;

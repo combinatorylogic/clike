@@ -43,11 +43,30 @@ function clike_c_const(env, c, nt)
          |  real -> 'val'('float'(v, rtype))
          |  null -> 'val'('null'(clike_c_type(env, nt)))
          |  zero -> 'val'('zero'(clike_c_type(env, t)))
+         |  var  -> 'val'('var'(nm))
+         |  ptr  -> 'val'(c) // TODO: ?!?
          |  constarray -> {
              et = clike_array_elt_type(nt);
              'val'('array'(
                  clike_c_type(env, et),
                 @map elts do cadr(clike_c_const(env, elts, et))))
+            }
+         |  conststruct -> {
+                strtp = clike_env_unitype(env, t);
+                getelts(tp) =
+                  match tp with 
+                    struct(nm,@elts) -> elts;
+                vals = mkhash();
+                iter [enm;etp] in getelts(strtp) do {
+                  ohashput(vals, enm, 'zero'(etp));
+                };
+                iter [enm;evl] in elts do {
+                  ohashput(vals, enm, evl);
+                };
+                'val'('struct'(@map [enm;etp] in getelts(strtp) do {
+                          [clike_c_type(env, etp);
+                           cadr(clike_c_const(env, ohashget(vals, enm), etp))]
+                      }));
             }
          |  else -> ccerror('CLIKE:NOT-IMPLEMENTED-YET'(c))
         }}
@@ -415,7 +434,11 @@ function clike_precompile(env, c)
       | globstring -> 'stringtmp'(s)
       | var -> 'loadvar'(nm)
       | arg -> 'val'('var'(nm))
-      | glob -> 'load'('_':'val'('global'(nm)))
+      | glob -> {
+                  gtp = clike_env_globtype(env, nm);
+                  if (clike_type_isa_pointer(gtp)) 'val'('global'(nm))
+                    else 'load'('_':'val'('global'(nm)))
+                }
       | globfun -> 'load'('_':'val'('globalfun'(nm)))
       | array -> 'load'(clike_array_access(ar,idxs,node))
       | ref -> cdr(e)

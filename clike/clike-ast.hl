@@ -14,7 +14,7 @@ ast clike {
      | efunc(pos:LOC, llcallconv:cc, lltype:ret, topident:name, bool:va,
               *llfuncarg:args)
      | typedef(pos:LOC, lltype:tp, topident:name)
-     | global(pos:LOC, lltype:tp, llvarname:name)
+     | global(pos:LOC, lltype:tp, llvarname:name, .*llconst:init)
      | eglobal(pos:LOC, lltype:tp, llvarname:name)
      | begin(.*lltoplev:es)
 
@@ -157,6 +157,8 @@ ast clike {
      | constarray(. *llconst:elts)
      | conststruct(lltype:t, .*llcstrelt:elts)
      | zero(lltype:t)
+     | var(ident:nm)
+     | ptr(llconst:c)
      ;
    
    llcstrelt is (ident:fld, llconst:v);
@@ -177,9 +179,9 @@ ast clike {
      | struct(*ident:nm, .*llstrelt:ts)
      | structalias(ident:nm)
      | structref(ident:nm)
-     | ptr(lltype:t)
+     | ptr(lltype:t,.*aspace:spc)
      | fun(lltype:ret, bool:va, .*lltype:args)
-     | array(lltype:t, .*int:dims)
+     | array(lltype:t, *int:dims, .*aspace:spc)
      | string()
      | void()
 
@@ -285,7 +287,26 @@ ast clike3 {
         | globalfun(ident:nm)
         | sizeof(irtype:t)
         ;
+        
+  irtype = 
+           integer(ident:type)
+         | float(ident:ftype)
+	 | label()
+	 | void()
+	 | array(*int:dims, irtype:t, .*aspace:spc)
+	 | %function(irtype:ret, .*irtype:args)
+	 | varfunction(irtype:ret, .*irtype:args)
+	 | struct(ident:nm, . *irtype:elts)
+         | structref(ident:nm)
+	 | packed(ident:nm, . *irtype:elts)
+	 | pointer(irtype:t, .*aspace:spc)
+	 | vector(int:n, irtype:t)
+         | alias(ident:id)
+	 ;
 }
 }
 
+
+
+%%%%%%%%%%%%
 

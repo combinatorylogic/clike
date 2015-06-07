@@ -8,21 +8,26 @@ all: clikecc.exe clikescc.exe doc/doc.pdf
 llvm-wrapper/lib/LLVM.so:
 	$(MAKE) -C llvm-wrapper
 
+-include MBaseLLVM.dll.d
 MBaseLLVM.dll: llvm-wrapper/lib/LLVM.so
 	$(PFRONT) /d MBaseLLVM ./llvm-wrapper/bindings/lib.hl
 	cp MBaseLLVM.dll clike/
 
+-include CLikeCore.dll.d
 CLikeCore.dll: MBaseLLVM.dll
 	$(PFRONT) /d CLikeCore ./clike/clike-lib.hl
 	cp CLikeCore.dll clike/
 
+-include CLikeSCore.dll.d
 CLikeSCore.dll:
 	$(PFRONT) /d CLikeSCore ./clike/clike-standalone.hl
 	cp CLikeSCore.dll clike/
 
+-include clikecc.exe.d
 clikecc.exe: CLikeCore.dll
 	$(PFRONT) /c clikecc ./clike/clike-cc.hl
 
+-include clikescc.exe.d
 clikescc.exe: CLikeSCore.dll
 	$(PFRONT) /c clikescc ./clike/clike-cc-standalone.hl
 

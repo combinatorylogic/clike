@@ -84,7 +84,7 @@ String String String
 
 Test: ts_27
 a.a=1, a.b.a = 2, a.b.b[3] = 3
-TypeOf(a.b)=(struct (_stest_27) (a (integer i32)) (b (array (integer i32) 5)))
+TypeOf(a.b)=(struct (_stest_27) (a (integer i32)) (b (array (integer i32) (5))))
 
 Test: ts_28
 1980 = 1980, a.x = 99
@@ -96,7 +96,7 @@ Test: ts_30
 c=1, i=4, l=8, f=4, d=8
 
 Test: ts_31
-t1=(integer i64), t2=(integer i32), t3=(real double), t4=(ptr (integer i8)), t5=(struct (_xx) (x (array (integer i32) 5)) (y (array (real float) 10)) (next (ptr (structref _xx)))), t6=(struct (_xx) (x (array (integer i32) 5)) (y (array (real float) 10)) (next (ptr (structref _xx))))
+t1=(integer i64), t2=(integer i32), t3=(real double), t4=(ptr (integer i8)), t5=(struct (_xx) (x (array (integer i32) (5))) (y (array (real float) (10))) (next (ptr (structref _xx)))), t6=(struct (_xx) (x (array (integer i32) (5))) (y (array (real float) (10))) (next (ptr (structref _xx))))
 
 Test: ts_32
 abcd=Xabcd
@@ -155,4 +155,7 @@ Sum=53
 Test: ts_47x
 [1][2][3][4]
 1 2 3 4 
+
+Test: ts_globarray
+21=21
 Done.

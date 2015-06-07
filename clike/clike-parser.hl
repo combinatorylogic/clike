@@ -33,6 +33,8 @@ parser pfclike ( pfront ) {
 
   cldouble := [tkcldouble]:v => $sval(v);
 
+  clnumber := [hexnumber] / [number];
+
   ///\commentbox{Keywords that should not be parsed as identifiers; Some keywords are clike--specific, some came from C.}\\
   @@clkeywordI := "break"/"null"/"NULL"/"case"/"switch"/"if"/"else"/"for"/"do"/
                   "switch"/"type"/"code"/"return"/"default"/
@@ -106,7 +108,10 @@ parser pfclike ( pfront ) {
 
   clsigarg := [cltypebase]:t [clvarname]:name => $cdr(g(t,name));
 
-  clglob := [cltypebase]:t [clvarname]:name => $cdr(g(t,name));
+  clglob :=
+           {[cltypebase]:t [clvarname]:name "=" [clconstext]:c =>
+                $cdr(g(t,name,c))}
+         / {[cltypebase]:t [clvarname]:name => $cdr(g(t,name))};
 
   ///\commentbox{A macro argument parser, it is not quite C--ish}\\
   clmcarg := 
@@ -124,25 +129,27 @@ parser pfclike ( pfront ) {
   ///\commentbox{Data types declarations}\\
   cltype :=
             { [cltypeattr]:ta [cltype]:t => attr(ta,t) }
+         /  { "::fun" [cltype]:t "(" ecslist<[cltype],",">:args ")" => fun(t, $nil(), @args) }
          /  { [cltype]:t "*" => ptr(t) }
-         /  { [cltype]:t "(" ecslist<[cltype],",">:args ")" => fun(t, $nil(), @args) }
          /  { [cltype]:t "[" "]" => ptr(t) }
-         /  { [cltype]:t "[" [number]:n "]" => array(t,n) }
+         /  { [cltype]:t "[" [clnumber]:n "]" => array(t,$wrap(n)) }
          /  [cltypebase]
          ;
 
   cltypeattr :=
-            { addrspace [number]:n => addrspace(n) }
+            { addrspace [clnumber]:n => addrspace(n) }
          /  { const => a(`const) }
+         /  { volatile => a(`volatile) }
+         /  { constant => a(`constant) }
          ;
 
   clvarname := [clvarnamex]:v => p(v);
 
   clvarnamex :=
             { [clvarnamex]:t "[" "]" => ptr(t) }
-         /  { [clvarnamex]:t "[" [number]:n "]" => array(t,n) }
+         /  { [clvarnamex]:t "[" [clnumber]:n "]" => array(t,$wrap(n)) }
          /  { "(" "*" [clvarnamex]:t ")" "(" ecslist<[cltype],",">:args ")" => 
-              ptr(fun(t,$nil(),@args)) }///\footnote{A special case: function pointer application}\\
+              ptr(fun(t,$nil(),@args)) }///\footnote{A special case: function pointer definition}\\
          /  [clvarnameatom];
 
   clvarnameatom :=
@@ -154,19 +161,19 @@ parser pfclike ( pfront ) {
             { "::type" "\" [clident]:i "\" => {qstate = unquote} unquote(i) }
          /  { "\" [clident]:i "\" => {qstate = unquote} unquote(i) }
          /  [cltype_start]
-         /  { "int32" => integer(`i32) }
-         /  { "int8"  => integer(`i8)  }
-         /  { "int16"  => integer(`i16)  }
-         /  { "int64"  => integer(`i64)  }
+         /  { int32 => integer(`i32) }
+         /  { int8  => integer(`i8)  }
+         /  { int16  => integer(`i16)  }
+         /  { int64  => integer(`i64)  }
 
-         /  { "uint32"  => integer(`u32)  }
-         /  { "uint8"  => integer(`u8)  }
-         /  { "uint16"  => integer(`u16)  }
-         /  { "uint64"  => integer(`u64)  }
+         /  { uint32  => integer(`u32)  }
+         /  { uint8  => integer(`u8)  }
+         /  { uint16  => integer(`u16)  }
+         /  { uint64  => integer(`u64)  }
 
-         /  { "void"    => void() }
-         /  { "float"   => real(`float) }
-         /  { "double"   => real(`double) }
+         /  { void    => void() }
+         /  { float   => real(`float) }
+         /  { double   => real(`double) }
          /  { struct [clqident]:selfname? "{" slist<[clstrelt]>:elts "}" =>
                     macrostruct(selfname,@elts) }
          /  { struct [clqident]:selfname =>
@@ -318,13 +325,13 @@ parser pfclike ( pfront ) {
 
             |  (500) [clbinexpr] "+" [clbinexpr] =>
                  {mode=expr} bin($source(),`add,L,R)
-            |  (500) [clbinexpr] "-" [clbinexpr] =>
+            |  (500) [clbinexpr] ("-" !">") [clbinexpr] =>
 	         {mode=expr} bin($source(),`sub,L,R)
 
             | [clunexpr]
 	    ;
 
-  clunexpr := { "-" [clprimexpr]:p => un(`minus,p) }
+  clunexpr := { "-" (!">") [clprimexpr]:p => un(`minus,p) }
             / { "++" [cllvalue]:p => pre(`inc,p) }
             / { "--" [cllvalue]:p => pre(`dec,p) }
             / { "!" [clprimexpr]:p => un(`not,p) }
@@ -354,7 +361,7 @@ parser pfclike ( pfront ) {
                     => {mode=expr} stdcallpfx(callptr($source(), fn,@args)) }
             /   { [clqident]:fn "(" ecslist<[clexpr0],",">:args ")" =>
                     {mode=expr} call($source(), fn,@args) }
-            /   { [cllvalue]:fn "(" ecslist<[clexpr0],",">:args ")"
+            /   { "(" [cllvalue]:fn ")" "(" ecslist<[clexpr0],",">:args ")"
                     => {mode=expr} callptr($source(), fn,@args) }
             /   [clprimexpratom_inner]
             /   [clatomexpr]
@@ -397,24 +404,32 @@ parser pfclike ( pfront ) {
   ///\commentbox{Constant literals}\\
   clconst := 
               { [cldouble]:d => real(`double, d) }///\footnote{Doubles are stored in AST in their string form}\\
-            / { [number]:n => integer(`i32, n) }
-            / { [hexnumber]:n => integer(`i32, n) }
+            / { [clnumber]:n => integer(`i32, n) }
             / { [clchar]:c => integer(`i8, c) }
             / { [string]:s => string(s) }
             / { null => null() }
             / { NULL => null() }
             / [clconst_inner]
-	    / [clconstcompound]
+            / [clconstcompound]
+            ;
+
+  ///\commentbox{Constant literals extended}\\
+  clconstext := 
+              [clconst]
+            / { [clqident]:id => var(id) }
+            / { "&" [clconstext]:c => ptr(c) }
+            / { [clexpr]:e => constexpr(e) } // generic expression, should be a compile
+                                             //   time constant
             ;
 
   ///\commentbox{Compound literals (no vectors yet, sorry)}\\
   clconstcompound :=
-              { "[" cslist<[clconst],",">:cc ","? "]" => constarray(@cc) }
-	    / { [cltype]:tp "{" ecslist<[clconstfield],";">:flds ";"? "}" =>
+              { "{" cslist<[clconstext],",">:cc ","? "}" => constarray(@cc) }
+            / { [cltype]:tp "{" ecslist<[clconstfield],",">:flds ","? "}" =>
                     conststruct(tp,@flds) }
 	    ;
   clconstfield := 
-               [clqident]:nm "=" [clconst]:vl => $list(nm,vl);
+               [clqident]:nm "=" [clconstext]:vl => $list(nm,vl);
 	    
   ///\commentbox{Extension entry points:}\\
   &cltop_start; &cltop_inner; &cltype_start; &cltype_inner;

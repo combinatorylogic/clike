@@ -1,6 +1,6 @@
 PFRONT = pfront
 
-LLVMCONF=llvm-config
+LLVMCONF:=llvm-config
 LLVMVER=$(shell $(LLVMCONF) --version)
 
 PWD = $(shell pwd)

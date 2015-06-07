@@ -1,0 +1,14 @@
+// An alternative backend
+
+include "./ast.hl"
+include "./refine.hl"
+
+include "./backend.hl"
+
+define ir2backend_hook = mkref([])
+
+function ir2backend(mdl, fnm)
+{
+ h = deref(ir2backend_hook);
+ if(h) h(mdl,fnm) else mdl
+}

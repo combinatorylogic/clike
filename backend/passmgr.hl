@@ -1,0 +1,49 @@
+// Mocking the LLVM pass manager, ha ha ha
+
+function ir2_bodypass(mdl, fn)
+   visit:ir2(irmodule: mdl) {
+      once irtoplevel {
+          %function -> if(body) { 
+             <[nannot;nbody]> = fn(body);
+              mk:node(body = nbody, annotations = nannot)
+          } else node
+      |   else -> node
+      }
+   }
+
+function ir2_functionpass_inner(fnc, fn)
+{
+   bbs = mkhash(); regs = mkhash(); regbbs = mkhash();
+   retval = mkref([]);
+   visit:ir2(irtoplevel: fnc) {
+      deep irbblock {
+         bblock -> iter [nm;e] in c do e(name, nm)
+      };
+      once irexpr : forall fun(lbl, reg) {
+         ohashput(regs, reg, node);
+         ohashput(regbbs, reg, lbl);
+      }
+   };
+   iter:ir2(irtoplevel: fnc) {
+      once irbblock {
+         bblock -> ohashput(bbs, name, node)
+      };
+   };
+   iter:ir2(irtoplevel: fnc) {
+      deep irtoplevel {
+        %function -> {
+          retval := fn(body, bbs, regs, ret, va:args);
+        }
+      }
+   };
+   return ^retval;
+}
+
+function ir2_functionpass(mdl, fn)
+   visit:ir2(irmodule: mdl) {
+      once irtoplevel {
+          %function -> { rt = mk:node(body = ir2_functionpass_inner(node, fn));
+                         return rt}
+      |   else -> node
+      }
+   }

@@ -69,6 +69,42 @@ function clike_patch_type(t, p)
   return (t1 : 'v'(^n));
 }
 
+///\commentbox{Collapse type with attributes into a qualified type}
+function clike_collapse_type_attr(as, tp) {
+  get_aspace(as) = {
+     lst = map append a in as do {
+        match a with
+           addrspace(n) -> [n]
+         | else -> []
+     };
+     if (lst) car(lst) else []
+  };
+  mkqual(as, t) = {
+    if (as) {
+      alst = map append a in as do {
+         match a with
+            a(id) -> [id]
+          | else -> []
+      };
+      if (alst) {
+        return 'qual'(unifiq(alst), t)
+      } else t
+    } else t
+  };
+  visit:clike(lltype:tp) {
+    once lltype {
+      attr -> clike_collapse_type_attr(a:as, t)
+    | array -> {
+        s = get_aspace(as);
+        if (s) mkqual(as, mk:node(spc = [s])) else mkqual(as, node)
+      }
+    | ptr ->  {
+        s = get_aspace(as);
+        if (s) mkqual(as, mk:node(spc = [s])) else mkqual(as, node)
+      }
+    | else -> mkqual(as, node)}}
+}
+
 ///\commentbox{Some core macros are build into clike ast, but must be expanded into simpler constructions before compilation begins and even before the user-defined macro expansion pass. The reason for this simple core macros is in the simplicity of the parser.}\\
 function clike_expand_core(tl)
 {
@@ -95,6 +131,7 @@ function clike_expand_core(tl)
      deep lltype {
         string -> 'ptr'('integer'('i8'))
       | macrostruct -> 'struct'(nm,@ts)
+      | attr -> clike_collapse_type_attr([a], t)
       | else -> node
      };
      deep llexpr {

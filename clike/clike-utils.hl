@@ -133,3 +133,17 @@ function clike_makebinding(env, fndef)
      return bindcode
   }
 }
+
+syntax of pfclike in cltop, start: ' "#" include [string]:fname '
+{
+   'pfrontext'(fun(mdl, env, flushcode, mcadd) {
+       flushcode();
+       oxpath = %corelib:get-lookup-path();
+       fp = %generic-filepath(fname);
+       %corelib:set-lookup-path(%_getpath(fp));
+       str = mkref(%peg:file->stream(fp));
+       ploop(%peg:makeenv(), str, peg_pfclike, mcadd);
+       %corelib:set-lookup-path(oxpath);
+       flushcode();
+    })
+}

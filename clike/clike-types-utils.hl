@@ -31,6 +31,12 @@ function clike_type_canonical(t)
 function clike_type_string(t)
   %to-string(clike_type_canonical(t))
 
+function clike_type_isa_pointer(t)
+  match t with
+     'array'(@_) -> true
+   | 'ptr'(@_) -> true
+   | else -> []
+
 // Check if two types are identical
 function clike_type_iso(a, b)
  do loop(t1=a, t2=b) {

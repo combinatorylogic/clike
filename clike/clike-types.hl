@@ -29,7 +29,7 @@ function clike_types_inner (env, c, toploop)
          | bin -> clike_fix_binoptypes(LOC, op,l,r)
          | compop -> 'bool'() : clike_fix_compoptypes(LOC, op ,l,r)
          | un -> case op { 'minus' -> car(e) : node
-                         | 'not' -> clike_fix_bool(e) }
+                         | 'not' -> 'bool'():mk:node(e = clike_fix_bool(e)) }
          | tri -> car(tr) : (mk:node(cnd=clike_fix_bool(cnd)))
          | typecast -> {
              t1 = clike_env_unitype(env, t);

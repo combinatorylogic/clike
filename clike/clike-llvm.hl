@@ -26,9 +26,9 @@ function clike_compile_ast(mdl, env, code)
   | else -> {
     llcode = clike_to_llvm(env,code);
     if(deref(clike_no_llvm)) {
-      llcode1 = clike_ir_post(llcode);
-      iter l in  llcode1 do
-       fprintln(deref(clike_outfile_v), %to-string(l))
+      llcode1 = clike_ir_post(mdl, llcode);
+      //iter l in  llcode1 do
+      // fprintln(deref(clike_outfile_v), %to-string(l))
     } else
     iter llcode do {
        if(deref(clike_debug_level)>7) println(#`(LLVM: ,llcode));
@@ -48,8 +48,7 @@ function clike_compile_stream(mdl, env, str)
     %r!(ccode,nil);
     clike_compile_ast(mdl, env, code);
   };
-  collector(add, get) {
-    mcadd(v) = {
+  mcadd(v) = {
       match v with
         [] -> []
       | 'pfront'(code) -> {
@@ -57,11 +56,14 @@ function clike_compile_stream(mdl, env, str)
               codex = %hlevel-compile(code);
               %read-compile-eval(codex);
          }
+      | 'pfrontext'(fn) -> {
+              flushcode();
+              fn(mdl, env, flushcode, mcadd);
+        }
       | else -> collectcode(v)
-    };
-    ploop(%peg:makeenv(), str, peg_pfclike, mcadd);
-    flushcode();
-  }
+  };
+  ploop(%peg:makeenv(), str, peg_pfclike, mcadd);
+  flushcode();
 }
 
 function clike_compile_file(mdl, env, fname)

@@ -1,0 +1,33 @@
+
+
+// Converting ir0 (LLVM "native" AST into ir2 - our own mini-LLVM)
+
+function %ir0->ir2(tl)
+{
+ dummy() = gensym(); //TODO: sequence
+ checkdst(nm) = if(not(nm) || %string?(nm)) dummy() else nm;
+ return visit:ir0(irtoplevel: tl) {
+    deep irtoplevel {
+      %function -> 'function'(cc,name,ret,va,args,body,[])
+    | global -> 'global'(%Sm<<(name), type, v)
+    | eglobal -> 'eglobal'(%Sm<<(name), type)
+    | else -> node
+    };
+    deep irbblock : {
+      <[t]:c> = split(fun(x) match x with 'branch'(@v) -> true, code);
+       'bblock'(%Sm<<(name), map(cdr,c), cdr(t))};
+    deep irstmt {
+      set -> 'set'(checkdst(nm), e)
+    | setstring -> 'set'(checkdst(nm), 'string'(s))
+    | store -> 'set'(dummy(), node)
+    | volatile_store -> 'set'(dummy(), node)
+    | label -> 'set'(dummy(), 'void'())
+    | else -> 'branch'(@node)
+    };
+    deep irexpr {
+      getelementptr -> 'getelementptr'(ptr, idxs)
+    | getelementptr_inbounds -> 'getelementptr_inbounds'(ptr, idxs)
+    | else -> node
+    }
+ }
+}

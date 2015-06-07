@@ -1,29 +1,31 @@
 /*
 
- AST is based on:
-   http://llvm.org/docs/LangRef.html
-
+  A slightly refined version of the LLVM IR AST
+ 
 */
 
 
-ast llvm_ir {
+ast ir2 {
 
-  irstructel is (irtype:t, irval:v);
+   irmodule is (.*irtoplevel:tls);
 
    irtoplevel = 
-      %function(ircallconv:cc, ident:name, irtype:ret, bool:va, *irarg:args, . *irbblock:body)
+      %function(ircallconv:cc, ident:name, irtype:ret, bool:va, *irarg:args, ircode:body, any:annotations)
     | eglobal(ident:name, irtype:type)
     | global(ident:name, irtype:type, irval:v) // v = const only!
     | comment(anything:x)
     ;
 
-  ircode is (*irstmt:code);
-  irbblock is (ident:name, .*irstmt:code);
+  ircode is (.*irbblock:bs);
+  irbblock =
+     bblock(ident:name, *irpair:c, irterm:t);
   irarg is (irtype:type, ident:name);
-  irlabel is (ident:nm);
+  irlabel is (.ident:nm);
+
+  irpair is (ident:nm, irexpr:e);
 
   irval = 
-  	  false()
+          false()
         | true()
         | null(irtype:t)
         | integer(int:v, .*ident:itp)
@@ -38,49 +40,47 @@ ast llvm_ir {
         | global(ident:nm)
         | globalfun(ident:nm)
         | sizeof(irtype:t)
-	;
+        ;
+
+  irstructel is (irtype:t, irval:v);
 
   irtype = 
            integer(ident:type)
          | float(ident:ftype)
-	 | label()
-	 | void()
-	 | array(*int:dims, irtype:t, .*aspace:spc)
-	 | %function(irtype:ret, .*irtype:args)
-	 | varfunction(irtype:ret, .*irtype:args)
-	 | struct(ident:nm, . *irtype:elts)
+         | label()
+         | void()
+         | array(*int:dims, irtype:t, .*aspace:spc)
+         | %function(irtype:ret, .*irtype:args)
+         | varfunction(irtype:ret, .*irtype:args)
+         | struct(ident:nm, . *irtype:elts)
          | structref(ident:nm)
-	 | packed(ident:nm, . *irtype:elts)
-	 | pointer(irtype:t, .*aspace:spc)
-	 | vector(int:n, irtype:t)
+         | packed(ident:nm, . *irtype:elts)
+         | pointer(irtype:t, .*aspace:spc)
+         | vector(int:n, irtype:t)
          | alias(ident:id)
-	 ;
+         ;
 
-  irstmt = /* More or less the same as terminal instructions,
+  irterm = /* More or less the same as terminal instructions,
               with 'store' moved here and 'invoke' moved to irexpr */
-       set(ident:nm, irexpr:e)
-     | setstring(ident:nm, string:s)
      | ret(irval:value)
      | vret()
      | br(irval:cnd, irlabel:tr, irlabel:fl)
-     | br_label(ident:nm)
+     | br_label(irlabel:nm)
      | switch(irval:value, irlabel:els, *irswitchdst:cases)
      | indirectbr(irsometype:t, irval:addr, *irlabel:ds)
      /* No invoke here, since it returns a value */
      | unwind()
      | unreacheable()
-     /* 'store' is a memory instruction, but it does not return any value */
-     | store(irval:ptr, irval:e)
-     | volatile_store(irtype:t, irval:value, irtype:ty, irval:ptr, *irval:align)
-     | label(ident:nm)
-      
      ;
 
   irswitchdst is ( irval:value, irlabel:dst );
   irphi is (irval:value, irlabel:dst);
 
   irexpr =
-     binary(irbinop:op, irval:l, irval:r)
+   | string(string:s)
+   | volatile_store(irtype:t, irval:value, irtype:ty, irval:ptr, *irval:align)
+   | store(irval:ptr, irval:e)
+   | binary(irbinop:op, irval:l, irval:r)
    | extractelement(int:n, irval:v, irval:idx)
    | insertelement(int:n, irtype:t, irval:v, irval:elt, irval:idx)
    | shufflevector(int:n1, irval:val1, int:n1, irval:val2, irval:mask)
@@ -88,8 +88,8 @@ ast llvm_ir {
    | insertvalue(irval:v, irtype:tv, irval:elt, irval:idx)
    | alloca(irtype:t)
    | load(irval:ptr)
-   | getelementptr(irval:ptr, . *irval:idxs)
-   | getelementptr_inbounds(irval:ptr, . *irval:idxs)
+   | getelementptr(irval:ptr, *irval:idxs, .*irtype:ptrtp)
+   | getelementptr_inbounds(irval:ptr, *irval:idxs, .*irtype:ptrtp)
    | convop(irconvop:op, irval:v, irtype:t)
    | icmp(iricond:vcond, irval:lhs, irval:rhs)
    | fcmp(irfcond:vcond, irval:lhs, irval:rhs)

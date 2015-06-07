@@ -1,0 +1,25 @@
+% literate:
+
+\subsection{AST for the generic SSA DSL}
+
+\pfcode{
+ast genssa {
+  top is (*varident:allocas, code:c);
+  code is (.*bblock:bs);
+  bblock =
+    b(labident:name, *oppair:ops, *labident:nexts);
+  oppair is (varident:name, iop:op);
+  iop = phi(varident:orig,*labident:prevs,*varident:vals)
+      | load(varident:v)
+      | store(varident:dst, varident:src)
+      | remap(varident:v)
+      | use(.*varident:ids)
+      ;
+  varident is id:v;
+  labident is id:v;
+}
+}
+
+
+%%%   
+%%% 

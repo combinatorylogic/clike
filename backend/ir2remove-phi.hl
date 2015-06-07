@@ -1,0 +1,35 @@
+function ir2remove_phis_pass(body, bbs, regs, ret, vargs)
+{
+  collector(phivaradd, phivarget) {
+    inss = mkhash(); phiz = mkhash();
+    visit:ir2(ircode: body) {
+       deep irpair : e(nm);
+       deep irexpr {
+         phi -> fun(tgt) {
+	   ntgt = gensym();
+           phivaradd([tgt;t;ntgt]); ohashput(phiz, tgt, ntgt);
+           iter [v;d] in dsts do
+	     ohashput(inss, d, [v;ntgt]:ohashget(inss, d))}
+       | else -> fun(tgt) []
+       }};
+    phis = phivarget();
+    return visit:ir2(ircode: body) {
+      deep irbblock {
+        bblock -> {
+	  hdr = if(name==='entry') {
+	      map [pnm;ptp;npnm] in phis do [npnm; 'alloca'(ptp)]
+	    } else [];
+	  ptl = map [v;tgt] in ohashget(inss, name) do {
+	      [gensym(); 'store'('var'(tgt), v)]
+	    };
+	  return mk:node(c = hdr :: c :: ptl)
+	}
+      };
+      deep irpair : [nm; e(nm)];
+      deep irexpr {
+         phi -> fun(tgt) 'load'('var'(ohashget(phiz, tgt)))
+       | else -> fun(tgt) node
+      };
+    }
+  }
+}

@@ -8,7 +8,7 @@
 function clike_compile_files(mdname, fls)
 {
   nollvm = ^clike_no_llvm;
-  mdl = if(nollvm) [] else llvm_init_module(mdname);
+  mdl = llvm_init_module(mdname);
   if(nollvm) clike_outfile_v := %io-open-write(%S<<(mdname,".x"));
   env = clike_global_env();
   %read-int-eval('define'('clike-current-env',#`(quote ,env)));
@@ -19,8 +19,10 @@ function clike_compile_files(mdname, fls)
        c(fn) -> clike_compile_file(mdl,env,fn)
      | x(fn) -> clike_bypass_file(mdl,env,fn)
   };
-  if(not(nollvm)) llvm_save(mdl, %S<<(mdname,".o")) else
+  if(not(nollvm)) llvm_save(mdl, %S<<(mdname,".o")) else {
+    llvm_save(mdl, mdname);
     %io-wclose(^clike_outfile_v);
+  };
   println("Done.");
 }
   

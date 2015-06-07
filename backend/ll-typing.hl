@@ -1,0 +1,221 @@
+% literate:
+
+\section{Typing for the ll-ast}
+
+
+\pfcode{
+function ll_env_getglobal(env,types, nm) {
+  return ohashget(env, %Sm<<("global-type: ", nm))
+}}
+
+\pfcode{
+function ll_env_fun_retval(env,types, nm) {
+  return ohashget(env, %Sm<<("function-ret-type: ", nm))
+}}
+
+\pfcode{
+function ll_pointee_type(tp) 
+  visit:ir2(irtype: tp) {
+    once irtype {
+        pointer -> t
+      | else -> ccerror('CLIKE:LL:NOTAPOINTER'(tp))
+      }}
+}
+
+\pfcode{
+function ll_fun_retval(fntp)
+  visit:ir2(irtype: fntp) {
+    once irtype {
+        %function -> ret
+      | else -> ccerror('CLIKE:LL:NOTAFUNCTION'(fntp))
+      }}
+}
+
+\pfcode{
+function ll_value_type_inner(env, types, vl) {
+  visit:ir2(irval: vl) {
+     once irval {
+        false -> 'integer'('i32')
+      | true -> 'integer'('i32')
+      | sizeof -> 'integer'('i32')
+      | null -> t
+      | integer -> 'integer'(if(itp) car(itp) else 'i32')
+      | float -> 'float'(if(ftp) car(ftp) else 'f32')
+      | struct -> 'struct'(gensym(), @map [t;v] in elts do t)
+      | array -> 'array'(t, [length(elts)])
+      | zero -> t
+      | undef -> t
+      | blockaddress -> 'pointer'('void'()) // is it really?
+      | var -> {
+          chk1 = ohashget(types, nm);
+          if (chk1) { // known local variable
+             return chk1
+          } else { // undiagnosed global?
+             chk2 = ll_env_getglobal(env, types, nm);
+             if (chk2) return 'pointer'(chk2)
+             else ccerror('CLIKE:LL:CANNOTTYPE'(vl))
+          }
+        }
+      | global -> {
+          chk1 = ll_env_getglobal(env, types, nm);
+          if (chk1) return 'pointer'(chk1)
+          else ccerror('CLIKE:LL:CANNOTTYPE'(vl))
+        }
+      | else -> ccerror('CLIKE:LL:CANNOTTYPE'(vl))
+     }
+  }
+}}
+
+\pfcode{
+function ll_value_type(env, types, vl) {
+  tp = ll_value_type_inner(env, types, vl);
+  match tp with
+    delay(nm, fn) -> {
+      ohashput(types, nm, []); // anti cycle
+      ntp = fn(nm); 
+      ohashput(types, nm, ntp);
+      return ntp
+    }
+  | else -> tp
+}}
+
+\pfcode{
+function ll_numeric_constant(v)
+  visit:ir2(irval:v) {
+    once irval {
+       integer -> v
+     | zero -> 0
+     | null -> 0
+     | else -> ccerror('CLIKE:LL:EXPECTCONSTANT'(v))
+    }
+  }}
+
+\pfcode{
+function ll_destruct_gep(tp, idxs) {
+  rt = foldl(fun(t, i) {
+           visit:ir2(irtype:t) {
+              once irtype {
+                 pointer -> t
+               | array -> t
+               | struct -> {
+                    cnst = ll_numeric_constant(i);
+                    fld = nth(cnst, elts);
+                    return fld
+                 }
+               | else -> t
+              }
+           }
+        }, tp, idxs);
+  return 'pointer'(rt) // TODO: preserve origin addrspace
+}}
+
+
+\pfcode{
+function ll_propagate_types_fun(env, fn) {
+  types = mkhash();
+  bind(nm, tp) = ohashput(types, nm, tp);
+  visit:ir2(irtoplevel:fn) {
+    deep irarg: bind(name, type);
+    deep irpair: ohashput(types, nm, 'delay'(nm, e));
+    deep irexpr {
+      string -> fun(dst) bind(dst, 'pointer'('integer'('i8')))
+    | binary -> fun(dst) bind(dst, ll_value_type(env,types, l))
+    | alloca -> fun(dst) bind(dst, 'pointer'(t))
+    | load -> fun(dst) {
+       tp = ll_value_type(env, types, ptr);
+       vtp = ll_pointee_type(tp);
+       bind(dst, vtp)
+      }
+    | getelementptr -> fun(dst) {
+        tp = ll_value_type(env,types,ptr);
+        eltp = ll_destruct_gep(tp, idxs);
+        bind(dst, eltp)
+      }
+    | getelementptr_inbounds -> fun(dst) {
+        tp = ll_value_type(env,types,ptr);
+        eltp = ll_destruct_gep(tp, idxs);
+        bind(dst, eltp)
+      }
+    | convop -> fun(dst) bind(dst, t)
+    | icmp -> fun(dst) bind(dst, 'integer'('i32')) // boolean?
+    | fcmp -> fun(dst) bind(dst, 'integer'('i32'))
+    | phi -> fun(dst) bind(dst, t)
+    | select -> fun(dst) bind(dst, ll_value_type(env, types, vthen))
+    | call -> fun(dst) {
+        tp = ll_env_fun_retval(env, types, fn);
+        bind(dst, tp)
+      }
+    | callptr -> fun(dst) {
+        tp = ll_value_type(env, types, fn);
+        ptp = ll_pointee_type(tp);
+        rtp = ll_fun_retval(ptp);
+        bind(dst, rtp)
+      }
+    | else -> fun(dst) [] // dunno what to do
+    }
+  };
+  // force it
+  iter:ir2(irtoplevel:fn) {
+    deep irpair: ll_value_type(env, types, 'var'(nm));
+  };
+  return types
+}}
+
+\pfcode{
+function ll_propagate_types(mdl) {
+  env = mkhash();
+  addglob(nm, tp) = {
+    ohashput(env, %Sm<<("global-type: ", nm), tp)
+  };
+  addfunret(nm, tp) = {
+    ohashput(env, %Sm<<("function-ret-type: ", nm),tp)
+  };
+  iter:ir2(irmodule:mdl) {
+    deep irtoplevel {
+       %function -> {
+         addfunret(name, ret);
+         addglob(name, 'function'(ret,@map [tp;nm] in args do tp))
+       }
+     | global -> addglob(name, type)
+     | eglobal -> addglob(name, type)
+    }
+  };
+  types = mkhash();
+  iter:ir2(irmodule:mdl) {
+    deep irtoplevel {
+       %function -> {
+          fntypes = ll_propagate_types_fun(env, node);
+          ohashput(types, name, fntypes)
+       }
+     | else -> []}};
+  return [env;types]
+}}
+
+\pfcode{
+function ll_annotate_geps_fun(env, types, src) {
+  visit:ir2(irtoplevel: src) {
+     deep irpair: mk:node(e = e(nm));
+     deep irexpr {
+        getelementptr -> fun(dst) {
+          tp = ll_value_type(env, types, ptr);
+          mk:node(ptrtp = [tp]);
+        }
+     |  getelementptr_inbounds -> fun(dst) {
+          tp = ll_value_type(env, types, ptr);
+          mk:node(ptrtp = [tp]);
+        }
+     |  else -> fun(dst) node
+     }}}
+
+function ll_annotate_geps(envtypes, mdl) {
+  <[env;types]> = envtypes;
+   visit:ir2(irmodule:mdl) {
+      deep irtoplevel {
+        %function -> {
+          fntypes = ohashget(types, name);
+          ll_annotate_geps_fun(env, fntypes, node);
+        }
+      | else -> node}}}}
+
+
+%%%%

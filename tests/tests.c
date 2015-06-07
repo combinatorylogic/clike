@@ -738,6 +738,15 @@ $test ts_48
 }
 */
 
+int globarray[100];
+
+$test ts_globarray
+{
+  globarray[1] = 1;
+  globarray[20] = 20;
+  printf("21=%d\n", globarray[1] + globarray[20]);
+}
+
 //////////////////////////////////////////////
 
 void main()

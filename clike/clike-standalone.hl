@@ -10,6 +10,9 @@
 #(n.module CLikeSCore)
 
 #(sysdll MBaseLogic)
+#(sysdll MBaseExtra)
+
+include "../backend/alt.hl"
 
 -------------------------------------
 
@@ -17,15 +20,22 @@
 
 function llvm_emit(mdl, code) []
 
-function llvm_init_module(nm) []
+function llvm_init_module(nm) collector(add, get) {
+   return [add;get;nm]
+}
 
-function llvm_save(mdl, name) []
+function llvm_save(mdl, name) {
+  <[add;get;nm]> = mdl;
+   c = get();
+   return ir2backend(c, nm)
+}
 
 define llvm_no_engine = mkref([])
 define %llvm-optimise = mkref([])
 
-function clike_ir_post(mdl)
-   mdl
+function clike_ir_post(mdl, llcode) {
+  <[add;get;nm]> = mdl; iter c in llcode do add(c)
+}
 
 -------------------------------------
 

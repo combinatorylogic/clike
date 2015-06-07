@@ -1,0 +1,171 @@
+
+function il2ssa_irval_var(v)
+  visit:ir2(irval: v) {
+     once irval {
+        var -> nm
+      | else -> []
+     }
+  }
+
+function il2ssa_use(e)
+collector(add, get) {
+  iter:ir2(irexpr: e) {
+     once irval {
+        var -> add(nm)
+      | else -> []
+     }
+  };
+  return unifiq(get())
+}
+
+function il2ssa_term_labels(t)
+collector(add, get) {
+  iter:ir2(irterm: t) {
+     once irlabel : add(node);
+  };
+  return unifiq(get())
+}
+
+function il2ssa_term_uses(t)
+collector(add, get) {
+  iter:ir2(irterm: t) {
+    once irval {
+        var -> add(nm)
+      | else -> []
+    }
+  };
+  return unifiq(get())
+}
+
+function il2ssa_genssa(code)
+collector(add, get) {
+  consts = mkhash(); otyps = mkhash();
+  return [ /* A list: [consts; gencode; allocas; otyps] */
+   // consts:
+   consts;
+   // gencode:
+   visit:ir2(ircode: code) {
+    deep irbblock {
+       bblock -> {
+        <tuses:tl> = t;
+         'b'(name, c::[[%Sm<<(name,"__EXIT");'use'(@tuses)]], tl)
+       }
+    };
+    once irterm : forall {
+      il2ssa_term_uses(node):il2ssa_term_labels(node);
+    };
+    once irexpr {
+       load -> { p = il2ssa_irval_var(ptr);
+                 if(p) 'load'(p) else 'use'() }
+    |  store -> { d1 = il2ssa_irval_var(ptr);
+                  e0 = il2ssa_irval_var(e);
+                  e1 = if(e0) e0 else {
+                     nm = gensym();
+                     ohashput(consts, nm, e);
+                     return nm
+                  };
+                  if(d1) {
+                     'store'(d1,e1)
+                  } else { 'use'(@il2ssa_use(node)) }
+                }
+    |  alloca -> {
+          add(caar(stack));
+          ohashput(otyps, caar(stack), t);
+          return 'store'(caar(stack),'_UNDEF')
+       }
+    |  else -> 'use'(@il2ssa_use(node))
+    };
+    deep irpair : {
+       if(nm) node else [gensym(); e]
+    };
+   };
+   // allocas:
+   get();
+   // otyps:
+   otyps]
+}
+
+function il2ssa_dossa(code) {
+ // Prepare the genssa form
+ <[consts; gencode; allocas; otyps]> = il2ssa_genssa(code);
+ // Refine the list of allocas
+ noalloc = mkhash();
+ donotalloc(ns) = {
+    iter n in ns do if n {
+      ohashput(noalloc, n, true)
+    }
+ };
+ visit:ir2(ircode: code) {
+   once irexpr {
+     | load -> []
+     | store -> donotalloc([il2ssa_irval_var(e)])
+     | else -> donotalloc(il2ssa_use(node))
+   }
+ };
+ // Perform the genssa mumbo-jumbo
+ nallocas = filter a in allocas as not(ohashget(noalloc, a));
+ nssa = ssa_transform(gencode, nallocas);
+ return [consts; nallocas; nssa; otyps]
+}
+
+function il2ssa_fullssa(code) 
+{
+ <[consts; nallocas; nssa; otyps]> = il2ssa_dossa(code);
+ <[vmap;ngen;DT]> = nssa;
+  loops = ssa_find_loops(ngen, DT);
+
+  origtype(nm) = ohashget(otyps, nm);
+ // Decode the genssa representation: fill the hashtables
+  genh = mkhash();
+  remap0(n) = {
+       do loop(x = ohashget(vmap, n), p = n) {
+          if(x) return loop(ohashget(vmap, x), x)
+          else return p }};
+  remap(n) = {
+     n0 = remap0(n);
+     chk = ohashget(consts, n0);
+     if(chk) chk else 'var'(n0)
+  };
+  nah = mkhash(); iter a in nallocas do ohashput(nah, a, a);
+  nahp(n) = ohashget(nah, n);
+  nahv(v) = {
+    match v with
+       var(nm) -> nahp(nm)
+     | else -> []
+  };
+  still = mkhash();
+  stillthere(k) = ohashget(still, k);
+  markpresense(k) = ohashput(still, k, k);
+  visit:genssa(code: ngen) {
+    deep bblock { b -> iter ops do ops(name) };
+    deep oppair : fun(bb) { markpresense(name); op(bb, name) };
+    deep iop {
+         phi -> fun(bb, tgt) {
+           nphi = [tgt;'phi'(origtype(orig), @zip(map vals do remap(vals), prevs))];
+           ohashput(genh, bb,
+              ohashget(genh, bb)::[nphi]) }
+      |  else -> fun(bb, tgt) {[]} }};
+ // Apply the decoded remapping and phi insertion:
+  ret = visit:ir2(ircode: code) {
+    deep irbblock {
+       bblock ->
+          mk:node(c = ohashget(genh, name) :: map append [k;v] in c do 
+                    if (v && stillthere(k)) [[k;v]] else [])
+    };
+    deep irexpr {
+       alloca -> if(nahp(caar(stack))) [] else node
+     | load -> if(nahv(ptr)) [] else node
+     | store -> if(nahv(ptr)) [] else node
+     | else -> node
+    };
+    deep irval {
+       var -> {
+          chk = remap(nm);
+          if(chk) chk else node
+       }
+    |  else -> node
+    };
+  };
+
+ return [cadr(loops);ret]
+}
