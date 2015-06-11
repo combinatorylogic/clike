@@ -145,6 +145,9 @@ function ll_propagate_types_fun(env, fn) {
         tp = ll_env_fun_retval(env, types, fn);
         bind(dst, tp)
       }
+    | inline -> fun(dst) {
+        bind(dst, t)
+      }
     | callptr -> fun(dst) {
         tp = ll_value_type(env, types, fn);
         ptp = ll_pointee_type(tp);

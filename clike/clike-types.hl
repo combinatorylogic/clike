@@ -81,6 +81,7 @@ function clike_types_inner (env, c, toploop)
               ncode = loop('passexpr'(ncode_0)); // redo the propagation
               return ncode
            }
+         | inline -> return ret:node
          | else -> ccerror('CLIKE:NOT-ALLOWED-HERE'(node))
        };
        deep llcode {

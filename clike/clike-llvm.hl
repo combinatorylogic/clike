@@ -68,8 +68,13 @@ function clike_compile_stream(mdl, env, str)
 
 function clike_compile_file(mdl, env, fname)
 {
-  str = mkref(%peg:file->stream(fname));
-  clike_compile_stream(mdl, env, str);
+  oxpath = %corelib:get-lookup-path();
+  fp = %generic-filepath(fname);
+  %corelib:set-lookup-path(%_getpath(fp));
+  str = mkref(%peg:file->stream(fp));
+  ret = clike_compile_stream(mdl, env, str);
+  %corelib:set-lookup-path(oxpath);
+  return ret;
 }
 
 function clike_compile_string(mdl, env, s)

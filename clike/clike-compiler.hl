@@ -445,6 +445,7 @@ function clike_precompile(env, c)
       | deref -> 'load'(e)
       | getelt -> 'load'(clike_elt_access(e,fldnm,node))
       | sizeof -> 'val'('sizeof'(clike_c_type(env, t)))
+      | inline -> 'inline'(clike_c_type(env, ret), args, code)
      };
      // lvalues are different, they are compiled into a code which gives a
      //  pointer instead of a value

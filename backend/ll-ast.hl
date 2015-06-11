@@ -99,5 +99,6 @@ ast ir2 {
    | callptr(irval:fn, .*irval:args)
    | callptrstd(irval:fn, .*irval:args)
    | ptr(irval:src, irtype:dst)
+   | inline(irtype:t, *irval:args, any:code)
    ;
 }

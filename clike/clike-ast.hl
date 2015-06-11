@@ -133,6 +133,9 @@ ast clike {
      // Special dual-stage macro expansion (propagation + post-propagation)
      | typedmacro(ident:nm, .*lltmacroarg:args)
 
+     // Inline assembly or whatever else
+     | inline(lltype:ret,*llexpr:args, any:code)
+
      // Should not appear after macro expansions
      | macroapp(ident:nm, .*llmacroarg:args)
      | protoinblock(pos:LOC, .*llcode:c)
@@ -267,6 +270,7 @@ ast clike3 {
    | liftstatements(llstmt2:s, llexpr2:e)
    | val(llval:v)
    | stringtmp(string:s)
+   | inline(irtype:t, *llexpr2:args, any:code)
    ;
  
   llval =
