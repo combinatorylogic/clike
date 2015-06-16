@@ -57,7 +57,7 @@ function clike_compile(etoploop, topenv, top)
                    'function'(cc1,name, clike_c_type(env, clike_env_unitype(env, ret)), va,  
                                  map [tp;'v'(nm)] in args do {
                                     [clike_c_type(env,clike_env_unitype(env, tp)); nm]
-                                 })]
+                                 },[])]
                  }
       | global -> {clike_env_defglobal(topenv, cadr(name), tp);
                    env = topenv:mkhash();
@@ -90,7 +90,7 @@ function clike_compile(etoploop, topenv, top)
                                  map [tp;'v'(nm)] in args do {
                                     [clike_c_type(env,clike_env_unitype(env, tp)); nm]
                                  }, 
-                                 @cbody)]
+                                 cbody,@annotations)]
         }
       | else -> ccerror('CLIKE:NOT-IMPLEMENTED-YET'(node))
      }

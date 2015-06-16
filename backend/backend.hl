@@ -3,10 +3,10 @@ include "./ssa-ast.hl"
 
 include "./ll-ast.hl"
 include "./ll-typing.hl"
+include "./ll-inline.hl"
 
 include "./ir2ssa.hl"
 include "./passmgr.hl"
 include "./ir2remove-phi.hl"
-
 
 

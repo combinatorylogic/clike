@@ -1,0 +1,159 @@
+% literate:
+
+\section{Inlining direct function calls}
+
+Inlining involves splitting basic blocks and inserting a number of new basic
+blocks in between. It worth abstracting this out into an intermediate step:
+
+\pfcode{
+ast ir2split: ir2 () {
+   irexpr += splitbb(ident:entry, ident:nxt, *irbblock:newbbs);
+}}
+
+\pfcode{
+function ir2split_flatten(fnc) collector(bbadd, bbget) {
+   fixphis = mkhash();
+   visit:ir2split(irtoplevel:fnc) {
+     deep irpair: e(nm);
+     once irexpr {
+       splitbb -> fun(nm) 'SPLIT'(entry, nxt, newbbs)
+     | else -> fun(nm) [nm;node]};
+     deep irbblock {
+       bblock -> {
+           // keep everything prior to bbsplit,
+           // replace terminal with br to split entry,
+           // create a new basic block 'nxt' with the rest
+           // and the old terminal
+           //
+           // Note that it's possible to have multiple splits in a single
+           // basic block.
+           do loop (cs = c, acc = collector(add,get) add:get, thislbl = name) {
+              match cs with
+                 'SPLIT'(entry, nxt, newbbs):rest -> {
+                    // Terminate the current basic block
+                    code = (cdr(acc))();
+                    newbb = 'bblock'(thislbl, code, 'br_label'(entry));
+                    bbadd(newbb);
+                    // Add the inlined basic blocks
+                    iter b in newbbs do bbadd(b);
+                    // Start a new basic block and carry on
+                    loop(rest, collector(add,get) add:get, nxt)
+                 }
+               | hd : tl -> {(car(acc))(hd); loop(tl, acc, thislbl)}
+               | [] -> {
+                    code = (cdr(acc))();
+                    if (not(thislbl === name)) {
+                       ohashput(fixphis, name, thislbl);
+                    };
+                    newbb = 'bblock'(thislbl, code, t);
+                    bbadd(newbb);}}}}};
+   pass1 = bbget();
+   pass2 = visit:ir2(ircode: pass1) {
+      deep irphi: {chk = ohashget(fixphis, dst); 
+                   if(chk) mk:node(dst=chk) else node}};
+   return visit:ir2(irtoplevel: fnc) {
+      once irtoplevel {
+         %function -> mk:node(body=pass2) | else -> []}};
+ }}
+
+\pfcode{
+function ir2_inline_function_body(dstdef, entry, retdst, nxt, callargs) {
+  // rename entry, give new names to all the other bbs, substitute args,
+  //   replace return with dst binding (if not void) and branch to nxt
+  collect ir2 (irtoplevel: dstdef) with
+    bbs from irbblock.bblock.name {
+     newnames = mkhash();
+     hashiter(fun(k,v) {
+        nnm = if(k==='entry') entry else gensym();
+        ohashput(newnames, k, nnm);
+     }, bbs);
+     rettp = visit:ir2(irtoplevel: dstdef) {
+       once irtoplevel { %function -> ret | else -> [] }};
+     argsh = mkhash();
+     visit:ir2(irtoplevel: dstdef) {
+       once irarg: name;
+       deep irtoplevel {
+          %function ->
+             iter [a;v] in zip(args,callargs) do ohashput(argsh, a, v)
+        | else -> []}};
+     // 1. rename labels
+     pass1 = visit:ir2(irtoplevel: dstdef) {
+        deep irtoplevel {
+           %function -> body
+         | else -> [] // error?
+        };
+        deep irbblock {
+           bblock -> mk:node(name = ohashget(newnames, name))
+        };
+        deep irlabel: {chk = ohashget(newnames, node);
+                       if(chk) chk else node}};
+     // 2. substitute arguments
+     pass2 = visit:ir2(ircode: pass1) {
+        deep irval {
+           var -> {chk = ohashget(argsh, nm);
+                   if (chk) chk else node}
+         | else -> node}};
+     // 3. Return
+     pass4 = collector(addret, getrets) {
+       tmpnxt = if(retdst==='_') nxt else gensym();
+       pass3 = visit:ir2(ircode: pass2) {
+         deep irbblock {
+            bblock -> mk:node(t=t(name))};
+         deep irterm {
+            vret -> fun(bblbl) 'br_label'(tmpnxt)
+         |  ret -> fun(bblbl) {
+               addret([value;bblbl]);
+               'br_label'(tmpnxt)}
+         |  else -> fun(bblbl) node}};
+       rets = getrets();
+       retblock = if(retdst==='_') [] else ['bblock'(tmpnxt, [[retdst;'phi'(rettp, @rets)]], 'br_label'(nxt))];
+       [@retblock;@pass3]; // pass4
+     };
+     // 5. Rename all the variables
+     newvarnames = mkhash();
+     iter:ir2(ircode:pass4) {
+       once irpair: {
+          if (not(nm === '_') && not(nm === retdst)) symbols(nnm) {
+             ohashput(newvarnames, nm, nnm)}}};
+     pass5 = visit:ir2(ircode:pass4) {
+       deep irpair: {
+          chk = ohashget(newvarnames, nm);
+          if(chk) mk:node(nm=chk) else node};
+       deep irval {
+          var -> {
+            chk = ohashget(newvarnames, nm);
+            if(chk) mk:node(nm=chk) else node}
+       |  else -> node}};
+     return pass5}}}
+
+\pfcode{
+function ir2_inline_function(fns, pred, fnc)
+  visit:ir2(irtoplevel: fnc) {
+     deep irpair: e(nm);
+     deep irexpr {
+        call -> fun(retdst) {
+           dstdef = ohashget(fns, fn);
+           if (pred(dstdef)) symbols(entry, nxt) { // inline it
+              [[];'splitbb'(entry, nxt, 
+                    ir2_inline_function_body(dstdef, entry, retdst, nxt, args))]
+           } else [retdst;node]
+        }
+      | else -> fun(dst) [dst;node]
+     }
+  }
+}
+
+\pfcode{
+function ir2_inline(pred, mdl) 
+collect ir2 (irmodule: mdl) with
+     fns from irtoplevel. %function . name {
+  visit:ir2(irmodule: mdl) {
+    deep irtoplevel {
+       %function -> if (body)
+                        ir2split_flatten(
+                            ir2_inline_function(fns, pred, node))
+                      else node
+    |  else -> node}}}}
+
+
+%%%%%%%%%

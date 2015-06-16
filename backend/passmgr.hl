@@ -5,7 +5,7 @@ function ir2_bodypass(mdl, fn)
       once irtoplevel {
           %function -> if(body) { 
              <[nannot;nbody]> = fn(body);
-              mk:node(body = nbody, annotations = nannot)
+              mk:node(body = nbody, annotations = nannot::annotations)
           } else node
       |   else -> node
       }

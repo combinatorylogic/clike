@@ -10,9 +10,9 @@
 ast clike {
    lltoplev =
        cfunc(pos:LOC, llcallconv:cc, lltype:ret, topident:name, bool:va, 
-              *llfuncarg:args, llcode:body)
+              *llfuncarg:args, llcode:body, .*any:annotations)
      | efunc(pos:LOC, llcallconv:cc, lltype:ret, topident:name, bool:va,
-              *llfuncarg:args)
+              *llfuncarg:args, .*any:annotations)
      | typedef(pos:LOC, lltype:tp, topident:name)
      | global(pos:LOC, lltype:tp, llvarname:name, .*llconst:init)
      | eglobal(pos:LOC, lltype:tp, llvarname:name)

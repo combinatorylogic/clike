@@ -60,15 +60,23 @@ parser pfclike ( pfront ) {
   @clchart := [QUOTE] . [QUOTE] => {ctoken=lexic};
   clchar := [clchart]:c => $charcode($stripval(c));
 
+  ///\commentbox{Standard function annotations}\\
+  clfuncannotations := eslist<[clfuncannotation]>;
+  clfuncannotation := { inline => inline() }
+                   /  { noinline => noinline() }
+                   /  clfuncannotation_inner
+                   ;
+
   ///\commentbox{Top--level entries (typedefs, function definitions and declarations, etc.)}\\
   cltopatom := [cltop_start]///\footnote{This is one of the extension points}\\
          / {typedef [cltype]:t [clqident]:nm ";" => 
                {mode=top} typedef($source(), t, nm) }
-         / {extern? [clfuncsignature]:sig ";" => 
-               {mode=top} efunc($source(), @sig) }
+         / {extern? [clfuncannotations]:as [clfuncsignature]:sig ";" => 
+               {mode=top} efunc($source(), @sig, @as) }
          / {extern? [clcleanfuncsignature]:sig ";" => sig }
-         / {[clfuncsignature]:sig "{" eslist<[clcode]>:es "}" => 
-               {mode=top} cfunc($source(), @sig,begin(@es)) }
+         / {[clfuncannotations]:as 
+            [clfuncsignature]:sig "{" eslist<[clcode]>:es "}" => 
+               {mode=top} cfunc($source(), @sig,begin(@es),@as) }
          / {extern [clglob]:g ";" => {mode=top} eglobal($source(), @g) }
          / {[clglob]:g ";" => {mode=top} global($source(), @g) }
          / [cltop_inner]
@@ -437,6 +445,7 @@ parser pfclike ( pfront ) {
   &classexpr_inner;
   &clunexpr_inner;
   &clpostexpr_inner; &clexpr_inner; &clconst_inner;
+  &clfuncannotation_inner;
 }
 
 }
