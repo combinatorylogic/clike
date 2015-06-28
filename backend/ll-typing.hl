@@ -46,6 +46,7 @@ function ll_value_type_inner(env, types, vl) {
       | zero -> t
       | undef -> t
       | blockaddress -> 'pointer'('void'()) // is it really?
+      | jumptable -> 'pointer'('integer'('i32')) // not quite
       | var -> {
           chk1 = ohashget(types, nm);
           if (chk1) { // known local variable

@@ -63,10 +63,14 @@ function ir2_inline_function_body(dstdef, entry, retdst, nxt, callargs) {
   collect ir2 (irtoplevel: dstdef) with
     bbs from irbblock.bblock.name {
      newnames = mkhash();
-     hashiter(fun(k,v) {
+     newnm(k) = {
         nnm = if(k==='entry') entry else gensym();
-        ohashput(newnames, k, nnm);
-     }, bbs);
+        ohashput(newnames, k, nnm)};
+     hashiter(fun(k,v) { newnm(k) }, bbs);
+     iter:ir2(irtoplevel:dstdef) {
+        deep irval {
+           jumptable -> newnm(rel)
+         | else -> []}};
      rettp = visit:ir2(irtoplevel: dstdef) {
        once irtoplevel { %function -> ret | else -> [] }};
      argsh = mkhash();

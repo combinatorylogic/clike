@@ -40,6 +40,8 @@ ast ir2 {
         | global(ident:nm)
         | globalfun(ident:nm)
         | sizeof(irtype:t)
+        // Useful for various backend legalisers
+        | jumptable(irlabel:rel, .*irlabel:vs)
         ;
 
   irstructel is (irtype:t, irval:v);
@@ -67,10 +69,12 @@ ast ir2 {
      | br(irval:cnd, irlabel:tr, irlabel:fl)
      | br_label(irlabel:nm)
      | switch(irval:value, irlabel:els, *irswitchdst:cases)
-     | indirectbr(irsometype:t, irval:addr, *irlabel:ds)
+     | indirectbr(any:t, irval:addr, *irlabel:ds)
      /* No invoke here, since it returns a value */
      | unwind()
      | unreacheable()
+     // For backends
+     | indirectbr_jt(irlabel:relname, irval:addr, .*irlabel:ds)
      ;
 
   irswitchdst is ( irval:value, irlabel:dst );
