@@ -48,7 +48,8 @@ function clike_compile_stream(mdl, env, str)
     %r!(ccode,nil);
     clike_compile_ast(mdl, env, code);
   };
-  mcadd(v) = {
+  mcadd(v) =
+   do mcadd(v=v) {
       match v with
         [] -> []
       | 'pfront'(code) -> {
