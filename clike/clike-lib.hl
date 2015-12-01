@@ -13,7 +13,7 @@
 
 #(usedll MBaseLLVM)
 
-function clike_ir_post(mdl)
+function clike_ir_post(mdl, code)
    return mdl
 
 define clike_no_llvm = mkref([]);
