@@ -74,7 +74,7 @@ function %llvm-init-module(nm)
            bldr = LLVM_PassManagerBuilderCreate();
            pm = LLVM_CreatePassManager();
            fpm = LLVM_CreateFunctionPassManagerForModule(mdl);
-           if (eetd) LLVM_AddTargetData(eetd,pm);
+           // if (eetd) LLVM_AddTargetData(eetd,pm);
            LLVM_PassManagerBuilderSetOptLevel(bldr, LLVMCodeGenLevelAggressive);
 
            LLVM_AddFunctionInliningPass(pm);

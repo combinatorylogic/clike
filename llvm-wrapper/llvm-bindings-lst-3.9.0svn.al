@@ -1,4 +1,9 @@
 (define llvm-enums-lst (quote (
+   ("LLVMVerifierFailureAction" "unsigned int" (
+       ("LLVMAbortProcessAction" 0)
+       ("LLVMPrintMessageAction" 1)
+       ("LLVMReturnStatusAction" 2)
+   ))
    ("LLVMAttribute" "int" (
        ("LLVMZExtAttribute" 1)
        ("LLVMSExtAttribute" 2)
@@ -87,6 +92,11 @@
        ("LLVMAtomicRMW" 57)
        ("LLVMResume" 58)
        ("LLVMLandingPad" 59)
+       ("LLVMCleanupRet" 61)
+       ("LLVMCatchRet" 62)
+       ("LLVMCatchPad" 63)
+       ("LLVMCleanupPad" 64)
+       ("LLVMCatchSwitch" 65)
    ))
    ("LLVMTypeKind" "unsigned int" (
        ("LLVMVoidTypeKind" 0)
@@ -105,6 +115,7 @@
        ("LLVMVectorTypeKind" 13)
        ("LLVMMetadataTypeKind" 14)
        ("LLVMX86_MMXTypeKind" 15)
+       ("LLVMTokenTypeKind" 16)
    ))
    ("LLVMLinkage" "unsigned int" (
        ("LLVMExternalLinkage" 0)
@@ -213,11 +224,6 @@
        ("LLVMDSRemark" 2)
        ("LLVMDSNote" 3)
    ))
-   ("LLVMVerifierFailureAction" "unsigned int" (
-       ("LLVMAbortProcessAction" 0)
-       ("LLVMPrintMessageAction" 1)
-       ("LLVMReturnStatusAction" 2)
-   ))
    ("LLVMCodeGenOptLevel" "unsigned int" (
        ("LLVMCodeGenLevelNone" 0)
        ("LLVMCodeGenLevelLess" 1)
@@ -244,8 +250,84 @@
    ))
 )))
 (define llvm-bindings-lst (quote (
-   ("LLVMLoadLibraryPermanently" "LLVMBool" (
-       ("Filename" "const char *")
+   ("LLVMVerifyModule" "LLVMBool" (
+       ("M" "LLVMModuleRef")
+       ("Action" "LLVMVerifierFailureAction")
+       ("OutMessage" "char **")
+   ))
+   ("LLVMVerifyFunction" "LLVMBool" (
+       ("Fn" "LLVMValueRef")
+       ("Action" "LLVMVerifierFailureAction")
+   ))
+   ("LLVMViewFunctionCFG" "void" (
+       ("Fn" "LLVMValueRef")
+   ))
+   ("LLVMViewFunctionCFGOnly" "void" (
+       ("Fn" "LLVMValueRef")
+   ))
+   ("LLVMParseBitcode" "LLVMBool" (
+       ("MemBuf" "LLVMMemoryBufferRef")
+       ("OutModule" "LLVMModuleRef *")
+       ("OutMessage" "char **")
+   ))
+   ("LLVMParseBitcode2" "LLVMBool" (
+       ("MemBuf" "LLVMMemoryBufferRef")
+       ("OutModule" "LLVMModuleRef *")
+   ))
+   ("LLVMParseBitcodeInContext" "LLVMBool" (
+       ("ContextRef" "LLVMContextRef")
+       ("MemBuf" "LLVMMemoryBufferRef")
+       ("OutModule" "LLVMModuleRef *")
+       ("OutMessage" "char **")
+   ))
+   ("LLVMParseBitcodeInContext2" "LLVMBool" (
+       ("ContextRef" "LLVMContextRef")
+       ("MemBuf" "LLVMMemoryBufferRef")
+       ("OutModule" "LLVMModuleRef *")
+   ))
+   ("LLVMGetBitcodeModuleInContext" "LLVMBool" (
+       ("ContextRef" "LLVMContextRef")
+       ("MemBuf" "LLVMMemoryBufferRef")
+       ("OutM" "LLVMModuleRef *")
+       ("OutMessage" "char **")
+   ))
+   ("LLVMGetBitcodeModuleInContext2" "LLVMBool" (
+       ("ContextRef" "LLVMContextRef")
+       ("MemBuf" "LLVMMemoryBufferRef")
+       ("OutM" "LLVMModuleRef *")
+   ))
+   ("LLVMGetBitcodeModule" "LLVMBool" (
+       ("MemBuf" "LLVMMemoryBufferRef")
+       ("OutM" "LLVMModuleRef *")
+       ("OutMessage" "char **")
+   ))
+   ("LLVMGetBitcodeModule2" "LLVMBool" (
+       ("MemBuf" "LLVMMemoryBufferRef")
+       ("OutM" "LLVMModuleRef *")
+   ))
+   ("LLVMWriteBitcodeToFile" "int" (
+       ("M" "LLVMModuleRef")
+       ("Path" "const char *")
+   ))
+   ("LLVMWriteBitcodeToFD" "int" (
+       ("M" "LLVMModuleRef")
+       ("FD" "int")
+       ("ShouldClose" "int")
+       ("Unbuffered" "int")
+   ))
+   ("LLVMWriteBitcodeToFileHandle" "int" (
+       ("M" "LLVMModuleRef")
+       ("Handle" "int")
+   ))
+   ("LLVMWriteBitcodeToMemoryBuffer" "LLVMMemoryBufferRef" (
+       ("M" "LLVMModuleRef")
+   ))
+   ("LLVMInstallFatalErrorHandler" "void" (
+       ("Handler" "LLVMFatalErrorHandler")
+   ))
+   ("LLVMResetFatalErrorHandler" "void" (
+   ))
+   ("LLVMEnablePrettyStackTrace" "void" (
    ))
    ("LLVMInitializeCore" "void" (
        ("R" "LLVMPassRegistryRef")
@@ -257,13 +339,6 @@
    ))
    ("LLVMDisposeMessage" "void" (
        ("Message" "char *")
-   ))
-   ("LLVMInstallFatalErrorHandler" "void" (
-       ("Handler" "LLVMFatalErrorHandler")
-   ))
-   ("LLVMResetFatalErrorHandler" "void" (
-   ))
-   ("LLVMEnablePrettyStackTrace" "void" (
    ))
    ("LLVMContextCreate" "LLVMContextRef" (
    ))
@@ -304,7 +379,13 @@
        ("ModuleID" "const char *")
        ("C" "LLVMContextRef")
    ))
+   ("LLVMCloneModule" "LLVMModuleRef" (
+       ("M" "LLVMModuleRef")
+   ))
    ("LLVMDisposeModule" "void" (
+       ("M" "LLVMModuleRef")
+   ))
+   ("LLVMGetDataLayoutStr" "const char *" (
        ("M" "LLVMModuleRef")
    ))
    ("LLVMGetDataLayout" "const char *" (
@@ -312,7 +393,7 @@
    ))
    ("LLVMSetDataLayout" "void" (
        ("M" "LLVMModuleRef")
-       ("Triple" "const char *")
+       ("DataLayoutStr" "const char *")
    ))
    ("LLVMGetTarget" "const char *" (
        ("M" "LLVMModuleRef")
@@ -408,6 +489,9 @@
    ("LLVMInt64TypeInContext" "LLVMTypeRef" (
        ("C" "LLVMContextRef")
    ))
+   ("LLVMInt128TypeInContext" "LLVMTypeRef" (
+       ("C" "LLVMContextRef")
+   ))
    ("LLVMIntTypeInContext" "LLVMTypeRef" (
        ("C" "LLVMContextRef")
        ("NumBits" "unsigned int")
@@ -421,6 +505,8 @@
    ("LLVMInt32Type" "LLVMTypeRef" (
    ))
    ("LLVMInt64Type" "LLVMTypeRef" (
+   ))
+   ("LLVMInt128Type" "LLVMTypeRef" (
    ))
    ("LLVMIntType" "LLVMTypeRef" (
        ("NumBits" "unsigned int")
@@ -508,6 +594,10 @@
        ("StructTy" "LLVMTypeRef")
        ("Dest" "LLVMTypeRef *")
    ))
+   ("LLVMStructGetTypeAtIndex" "LLVMTypeRef" (
+       ("StructTy" "LLVMTypeRef")
+       ("i" "unsigned int")
+   ))
    ("LLVMIsPackedStruct" "LLVMBool" (
        ("StructTy" "LLVMTypeRef")
    ))
@@ -588,12 +678,6 @@
    ("LLVMIsAInlineAsm" "LLVMValueRef" (
        ("Val" "LLVMValueRef")
    ))
-   ("LLVMIsAMDNode" "LLVMValueRef" (
-       ("Val" "LLVMValueRef")
-   ))
-   ("LLVMIsAMDString" "LLVMValueRef" (
-       ("Val" "LLVMValueRef")
-   ))
    ("LLVMIsAUser" "LLVMValueRef" (
        ("Val" "LLVMValueRef")
    ))
@@ -631,6 +715,9 @@
        ("Val" "LLVMValueRef")
    ))
    ("LLVMIsAConstantStruct" "LLVMValueRef" (
+       ("Val" "LLVMValueRef")
+   ))
+   ("LLVMIsAConstantTokenNone" "LLVMValueRef" (
        ("Val" "LLVMValueRef")
    ))
    ("LLVMIsAConstantVector" "LLVMValueRef" (
@@ -744,6 +831,21 @@
    ("LLVMIsAResumeInst" "LLVMValueRef" (
        ("Val" "LLVMValueRef")
    ))
+   ("LLVMIsACleanupReturnInst" "LLVMValueRef" (
+       ("Val" "LLVMValueRef")
+   ))
+   ("LLVMIsACatchReturnInst" "LLVMValueRef" (
+       ("Val" "LLVMValueRef")
+   ))
+   ("LLVMIsAFuncletPadInst" "LLVMValueRef" (
+       ("Val" "LLVMValueRef")
+   ))
+   ("LLVMIsACatchPadInst" "LLVMValueRef" (
+       ("Val" "LLVMValueRef")
+   ))
+   ("LLVMIsACleanupPadInst" "LLVMValueRef" (
+       ("Val" "LLVMValueRef")
+   ))
    ("LLVMIsAUnaryInstruction" "LLVMValueRef" (
        ("Val" "LLVMValueRef")
    ))
@@ -801,6 +903,12 @@
    ("LLVMIsAVAArgInst" "LLVMValueRef" (
        ("Val" "LLVMValueRef")
    ))
+   ("LLVMIsAMDNode" "LLVMValueRef" (
+       ("Val" "LLVMValueRef")
+   ))
+   ("LLVMIsAMDString" "LLVMValueRef" (
+       ("Val" "LLVMValueRef")
+   ))
    ("LLVMGetFirstUse" "LLVMUseRef" (
        ("Val" "LLVMValueRef")
    ))
@@ -814,6 +922,10 @@
        ("U" "LLVMUseRef")
    ))
    ("LLVMGetOperand" "LLVMValueRef" (
+       ("Val" "LLVMValueRef")
+       ("Index" "unsigned int")
+   ))
+   ("LLVMGetOperandUse" "LLVMUseRef" (
        ("Val" "LLVMValueRef")
        ("Index" "unsigned int")
    ))
@@ -880,6 +992,10 @@
    ("LLVMConstIntGetSExtValue" "long long" (
        ("ConstantVal" "LLVMValueRef")
    ))
+   ("LLVMConstRealGetDouble" "double" (
+       ("ConstantVal" "LLVMValueRef")
+       ("losesInfo" "LLVMBool *")
+   ))
    ("LLVMConstStringInContext" "LLVMValueRef" (
        ("C" "LLVMContextRef")
        ("Str" "const char *")
@@ -890,6 +1006,13 @@
        ("Str" "const char *")
        ("Length" "unsigned int")
        ("DontNullTerminate" "LLVMBool")
+   ))
+   ("LLVMIsConstantString" "LLVMBool" (
+       ("c" "LLVMValueRef")
+   ))
+   ("LLVMGetAsString" "const char *" (
+       ("c" "LLVMValueRef")
+       ("out" "size_t *")
    ))
    ("LLVMConstStructInContext" "LLVMValueRef" (
        ("C" "LLVMContextRef")
@@ -911,6 +1034,10 @@
        ("StructTy" "LLVMTypeRef")
        ("ConstantVals" "LLVMValueRef *")
        ("Count" "unsigned int")
+   ))
+   ("LLVMGetElementAsConstant" "LLVMValueRef" (
+       ("C" "LLVMValueRef")
+       ("idx" "unsigned int")
    ))
    ("LLVMConstVector" "LLVMValueRef" (
        ("ScalarConstantVals" "LLVMValueRef *")
@@ -1300,6 +1427,16 @@
    ("LLVMDeleteFunction" "void" (
        ("Fn" "LLVMValueRef")
    ))
+   ("LLVMHasPersonalityFn" "LLVMBool" (
+       ("Fn" "LLVMValueRef")
+   ))
+   ("LLVMGetPersonalityFn" "LLVMValueRef" (
+       ("Fn" "LLVMValueRef")
+   ))
+   ("LLVMSetPersonalityFn" "void" (
+       ("Fn" "LLVMValueRef")
+       ("PersonalityFn" "LLVMValueRef")
+   ))
    ("LLVMGetIntrinsicID" "unsigned int" (
        ("Fn" "LLVMValueRef")
    ))
@@ -1412,6 +1549,9 @@
    ("LLVMValueAsBasicBlock" "LLVMBasicBlockRef" (
        ("Val" "LLVMValueRef")
    ))
+   ("LLVMGetBasicBlockName" "const char *" (
+       ("BB" "LLVMBasicBlockRef")
+   ))
    ("LLVMGetBasicBlockParent" "LLVMValueRef" (
        ("BB" "LLVMBasicBlockRef")
    ))
@@ -1499,6 +1639,9 @@
    ("LLVMGetPreviousInstruction" "LLVMValueRef" (
        ("Inst" "LLVMValueRef")
    ))
+   ("LLVMInstructionRemoveFromParent" "void" (
+       ("Inst" "LLVMValueRef")
+   ))
    ("LLVMInstructionEraseFromParent" "void" (
        ("Inst" "LLVMValueRef")
    ))
@@ -1507,6 +1650,15 @@
    ))
    ("LLVMGetICmpPredicate" "LLVMIntPredicate" (
        ("Inst" "LLVMValueRef")
+   ))
+   ("LLVMGetFCmpPredicate" "LLVMRealPredicate" (
+       ("Inst" "LLVMValueRef")
+   ))
+   ("LLVMInstructionClone" "LLVMValueRef" (
+       ("Inst" "LLVMValueRef")
+   ))
+   ("LLVMGetNumArgOperands" "unsigned int" (
+       ("Instr" "LLVMValueRef")
    ))
    ("LLVMSetInstructionCallConv" "void" (
        ("Instr" "LLVMValueRef")
@@ -1530,6 +1682,9 @@
        ("index" "unsigned int")
        ("align" "unsigned int")
    ))
+   ("LLVMGetCalledValue" "LLVMValueRef" (
+       ("Instr" "LLVMValueRef")
+   ))
    ("LLVMIsTailCall" "LLVMBool" (
        ("CallInst" "LLVMValueRef")
    ))
@@ -1537,8 +1692,54 @@
        ("CallInst" "LLVMValueRef")
        ("IsTailCall" "LLVMBool")
    ))
+   ("LLVMGetNormalDest" "LLVMBasicBlockRef" (
+       ("InvokeInst" "LLVMValueRef")
+   ))
+   ("LLVMGetUnwindDest" "LLVMBasicBlockRef" (
+       ("InvokeInst" "LLVMValueRef")
+   ))
+   ("LLVMSetNormalDest" "void" (
+       ("InvokeInst" "LLVMValueRef")
+       ("B" "LLVMBasicBlockRef")
+   ))
+   ("LLVMSetUnwindDest" "void" (
+       ("InvokeInst" "LLVMValueRef")
+       ("B" "LLVMBasicBlockRef")
+   ))
+   ("LLVMGetNumSuccessors" "unsigned int" (
+       ("Term" "LLVMValueRef")
+   ))
+   ("LLVMGetSuccessor" "LLVMBasicBlockRef" (
+       ("Term" "LLVMValueRef")
+       ("i" "unsigned int")
+   ))
+   ("LLVMSetSuccessor" "void" (
+       ("Term" "LLVMValueRef")
+       ("i" "unsigned int")
+       ("block" "LLVMBasicBlockRef")
+   ))
+   ("LLVMIsConditional" "LLVMBool" (
+       ("Branch" "LLVMValueRef")
+   ))
+   ("LLVMGetCondition" "LLVMValueRef" (
+       ("Branch" "LLVMValueRef")
+   ))
+   ("LLVMSetCondition" "void" (
+       ("Branch" "LLVMValueRef")
+       ("Cond" "LLVMValueRef")
+   ))
    ("LLVMGetSwitchDefaultDest" "LLVMBasicBlockRef" (
        ("SwitchInstr" "LLVMValueRef")
+   ))
+   ("LLVMGetAllocatedType" "LLVMTypeRef" (
+       ("Alloca" "LLVMValueRef")
+   ))
+   ("LLVMIsInBounds" "LLVMBool" (
+       ("GEP" "LLVMValueRef")
+   ))
+   ("LLVMSetIsInBounds" "void" (
+       ("GEP" "LLVMValueRef")
+       ("b" "LLVMBool")
    ))
    ("LLVMAddIncoming" "void" (
        ("PhiNode" "LLVMValueRef")
@@ -1556,6 +1757,12 @@
    ("LLVMGetIncomingBlock" "LLVMBasicBlockRef" (
        ("PhiNode" "LLVMValueRef")
        ("Index" "unsigned int")
+   ))
+   ("LLVMGetNumIndices" "unsigned int" (
+       ("Inst" "LLVMValueRef")
+   ))
+   ("LLVMGetIndices" "const unsigned int *" (
+       ("Inst" "LLVMValueRef")
    ))
    ("LLVMCreateBuilderInContext" "LLVMBuilderRef" (
        ("C" "LLVMContextRef")
@@ -1669,9 +1876,19 @@
        ("IndirectBr" "LLVMValueRef")
        ("Dest" "LLVMBasicBlockRef")
    ))
+   ("LLVMGetNumClauses" "unsigned int" (
+       ("LandingPad" "LLVMValueRef")
+   ))
+   ("LLVMGetClause" "LLVMValueRef" (
+       ("LandingPad" "LLVMValueRef")
+       ("Idx" "unsigned int")
+   ))
    ("LLVMAddClause" "void" (
        ("LandingPad" "LLVMValueRef")
        ("ClauseVal" "LLVMValueRef")
+   ))
+   ("LLVMIsCleanup" "LLVMBool" (
+       ("LandingPad" "LLVMValueRef")
    ))
    ("LLVMSetCleanup" "void" (
        ("LandingPad" "LLVMValueRef")
@@ -1932,6 +2149,13 @@
        ("MemoryAccessInst" "LLVMValueRef")
        ("IsVolatile" "LLVMBool")
    ))
+   ("LLVMGetOrdering" "LLVMAtomicOrdering" (
+       ("MemoryAccessInst" "LLVMValueRef")
+   ))
+   ("LLVMSetOrdering" "void" (
+       ("MemoryAccessInst" "LLVMValueRef")
+       ("Ordering" "LLVMAtomicOrdering")
+   ))
    ("LLVMBuildTrunc" "LLVMValueRef" (
        ("A0" "LLVMBuilderRef")
        ("Val" "LLVMValueRef")
@@ -2155,6 +2379,36 @@
        ("ordering" "LLVMAtomicOrdering")
        ("singleThread" "LLVMBool")
    ))
+   ("LLVMBuildAtomicCmpXchg" "LLVMValueRef" (
+       ("B" "LLVMBuilderRef")
+       ("Ptr" "LLVMValueRef")
+       ("Cmp" "LLVMValueRef")
+       ("New" "LLVMValueRef")
+       ("SuccessOrdering" "LLVMAtomicOrdering")
+       ("FailureOrdering" "LLVMAtomicOrdering")
+       ("SingleThread" "LLVMBool")
+   ))
+   ("LLVMIsAtomicSingleThread" "LLVMBool" (
+       ("AtomicInst" "LLVMValueRef")
+   ))
+   ("LLVMSetAtomicSingleThread" "void" (
+       ("AtomicInst" "LLVMValueRef")
+       ("SingleThread" "LLVMBool")
+   ))
+   ("LLVMGetCmpXchgSuccessOrdering" "LLVMAtomicOrdering" (
+       ("CmpXchgInst" "LLVMValueRef")
+   ))
+   ("LLVMSetCmpXchgSuccessOrdering" "void" (
+       ("CmpXchgInst" "LLVMValueRef")
+       ("Ordering" "LLVMAtomicOrdering")
+   ))
+   ("LLVMGetCmpXchgFailureOrdering" "LLVMAtomicOrdering" (
+       ("CmpXchgInst" "LLVMValueRef")
+   ))
+   ("LLVMSetCmpXchgFailureOrdering" "void" (
+       ("CmpXchgInst" "LLVMValueRef")
+       ("Ordering" "LLVMAtomicOrdering")
+   ))
    ("LLVMCreateModuleProviderForExistingModule" "LLVMModuleProviderRef" (
        ("M" "LLVMModuleRef")
    ))
@@ -2223,79 +2477,153 @@
    ))
    ("LLVMIsMultithreaded" "LLVMBool" (
    ))
-   ("LLVMVerifyModule" "LLVMBool" (
-       ("M" "LLVMModuleRef")
-       ("Action" "LLVMVerifierFailureAction")
-       ("OutMessage" "char **")
+   ("LLVMInitializeAArch64TargetInfo" "void" (
    ))
-   ("LLVMVerifyFunction" "LLVMBool" (
-       ("Fn" "LLVMValueRef")
-       ("Action" "LLVMVerifierFailureAction")
+   ("LLVMInitializeAMDGPUTargetInfo" "void" (
    ))
-   ("LLVMViewFunctionCFG" "void" (
-       ("Fn" "LLVMValueRef")
+   ("LLVMInitializeARMTargetInfo" "void" (
    ))
-   ("LLVMViewFunctionCFGOnly" "void" (
-       ("Fn" "LLVMValueRef")
+   ("LLVMInitializeBPFTargetInfo" "void" (
    ))
-   ("LLVMParseBitcode" "LLVMBool" (
-       ("MemBuf" "LLVMMemoryBufferRef")
-       ("OutModule" "LLVMModuleRef *")
-       ("OutMessage" "char **")
+   ("LLVMInitializeCppBackendTargetInfo" "void" (
    ))
-   ("LLVMParseBitcodeInContext" "LLVMBool" (
-       ("ContextRef" "LLVMContextRef")
-       ("MemBuf" "LLVMMemoryBufferRef")
-       ("OutModule" "LLVMModuleRef *")
-       ("OutMessage" "char **")
+   ("LLVMInitializeHexagonTargetInfo" "void" (
    ))
-   ("LLVMGetBitcodeModuleInContext" "LLVMBool" (
-       ("ContextRef" "LLVMContextRef")
-       ("MemBuf" "LLVMMemoryBufferRef")
-       ("OutM" "LLVMModuleRef *")
-       ("OutMessage" "char **")
+   ("LLVMInitializeMipsTargetInfo" "void" (
    ))
-   ("LLVMGetBitcodeModule" "LLVMBool" (
-       ("MemBuf" "LLVMMemoryBufferRef")
-       ("OutM" "LLVMModuleRef *")
-       ("OutMessage" "char **")
+   ("LLVMInitializeMSP430TargetInfo" "void" (
    ))
-   ("LLVMGetBitcodeModuleProviderInContext" "LLVMBool" (
-       ("ContextRef" "LLVMContextRef")
-       ("MemBuf" "LLVMMemoryBufferRef")
-       ("OutMP" "LLVMModuleProviderRef *")
-       ("OutMessage" "char **")
+   ("LLVMInitializeNVPTXTargetInfo" "void" (
    ))
-   ("LLVMGetBitcodeModuleProvider" "LLVMBool" (
-       ("MemBuf" "LLVMMemoryBufferRef")
-       ("OutMP" "LLVMModuleProviderRef *")
-       ("OutMessage" "char **")
+   ("LLVMInitializePowerPCTargetInfo" "void" (
    ))
-   ("LLVMWriteBitcodeToFile" "int" (
-       ("M" "LLVMModuleRef")
-       ("Path" "const char *")
+   ("LLVMInitializeSparcTargetInfo" "void" (
    ))
-   ("LLVMWriteBitcodeToFD" "int" (
-       ("M" "LLVMModuleRef")
-       ("FD" "int")
-       ("ShouldClose" "int")
-       ("Unbuffered" "int")
-   ))
-   ("LLVMWriteBitcodeToFileHandle" "int" (
-       ("M" "LLVMModuleRef")
-       ("Handle" "int")
+   ("LLVMInitializeSystemZTargetInfo" "void" (
    ))
    ("LLVMInitializeX86TargetInfo" "void" (
    ))
+   ("LLVMInitializeXCoreTargetInfo" "void" (
+   ))
+   ("LLVMInitializeAArch64Target" "void" (
+   ))
+   ("LLVMInitializeAMDGPUTarget" "void" (
+   ))
+   ("LLVMInitializeARMTarget" "void" (
+   ))
+   ("LLVMInitializeBPFTarget" "void" (
+   ))
+   ("LLVMInitializeCppBackendTarget" "void" (
+   ))
+   ("LLVMInitializeHexagonTarget" "void" (
+   ))
+   ("LLVMInitializeMipsTarget" "void" (
+   ))
+   ("LLVMInitializeMSP430Target" "void" (
+   ))
+   ("LLVMInitializeNVPTXTarget" "void" (
+   ))
+   ("LLVMInitializePowerPCTarget" "void" (
+   ))
+   ("LLVMInitializeSparcTarget" "void" (
+   ))
+   ("LLVMInitializeSystemZTarget" "void" (
+   ))
    ("LLVMInitializeX86Target" "void" (
+   ))
+   ("LLVMInitializeXCoreTarget" "void" (
+   ))
+   ("LLVMInitializeAArch64TargetMC" "void" (
+   ))
+   ("LLVMInitializeAMDGPUTargetMC" "void" (
+   ))
+   ("LLVMInitializeARMTargetMC" "void" (
+   ))
+   ("LLVMInitializeBPFTargetMC" "void" (
+   ))
+   ("LLVMInitializeCppBackendTargetMC" "void" (
+   ))
+   ("LLVMInitializeHexagonTargetMC" "void" (
+   ))
+   ("LLVMInitializeMipsTargetMC" "void" (
+   ))
+   ("LLVMInitializeMSP430TargetMC" "void" (
+   ))
+   ("LLVMInitializeNVPTXTargetMC" "void" (
+   ))
+   ("LLVMInitializePowerPCTargetMC" "void" (
+   ))
+   ("LLVMInitializeSparcTargetMC" "void" (
+   ))
+   ("LLVMInitializeSystemZTargetMC" "void" (
    ))
    ("LLVMInitializeX86TargetMC" "void" (
    ))
+   ("LLVMInitializeXCoreTargetMC" "void" (
+   ))
+   ("LLVMInitializeAArch64AsmPrinter" "void" (
+   ))
+   ("LLVMInitializeAMDGPUAsmPrinter" "void" (
+   ))
+   ("LLVMInitializeARMAsmPrinter" "void" (
+   ))
+   ("LLVMInitializeBPFAsmPrinter" "void" (
+   ))
+   ("LLVMInitializeHexagonAsmPrinter" "void" (
+   ))
+   ("LLVMInitializeMipsAsmPrinter" "void" (
+   ))
+   ("LLVMInitializeMSP430AsmPrinter" "void" (
+   ))
+   ("LLVMInitializeNVPTXAsmPrinter" "void" (
+   ))
+   ("LLVMInitializePowerPCAsmPrinter" "void" (
+   ))
+   ("LLVMInitializeSparcAsmPrinter" "void" (
+   ))
+   ("LLVMInitializeSystemZAsmPrinter" "void" (
+   ))
    ("LLVMInitializeX86AsmPrinter" "void" (
+   ))
+   ("LLVMInitializeXCoreAsmPrinter" "void" (
+   ))
+   ("LLVMInitializeAArch64AsmParser" "void" (
+   ))
+   ("LLVMInitializeAMDGPUAsmParser" "void" (
+   ))
+   ("LLVMInitializeARMAsmParser" "void" (
+   ))
+   ("LLVMInitializeHexagonAsmParser" "void" (
+   ))
+   ("LLVMInitializeMipsAsmParser" "void" (
+   ))
+   ("LLVMInitializePowerPCAsmParser" "void" (
+   ))
+   ("LLVMInitializeSparcAsmParser" "void" (
+   ))
+   ("LLVMInitializeSystemZAsmParser" "void" (
    ))
    ("LLVMInitializeX86AsmParser" "void" (
    ))
+   ("LLVMInitializeAArch64Disassembler" "void" (
+   ))
+   ("LLVMInitializeAMDGPUDisassembler" "void" (
+   ))
+   ("LLVMInitializeARMDisassembler" "void" (
+   ))
+   ("LLVMInitializeHexagonDisassembler" "void" (
+   ))
+   ("LLVMInitializeMipsDisassembler" "void" (
+   ))
+   ("LLVMInitializePowerPCDisassembler" "void" (
+   ))
+   ("LLVMInitializeSparcDisassembler" "void" (
+   ))
+   ("LLVMInitializeSystemZDisassembler" "void" (
+   ))
    ("LLVMInitializeX86Disassembler" "void" (
+   ))
+   ("LLVMInitializeXCoreDisassembler" "void" (
    ))
    ("LLVMInitializeAllTargetInfos" "void" (
    ))
@@ -2317,12 +2645,18 @@
    ))
    ("LLVMInitializeNativeDisassembler" "LLVMBool" (
    ))
+   ("LLVMGetModuleDataLayout" "LLVMTargetDataRef" (
+       ("M" "LLVMModuleRef")
+   ))
+   ("LLVMSetModuleDataLayout" "void" (
+       ("M" "LLVMModuleRef")
+       ("DL" "LLVMTargetDataRef")
+   ))
    ("LLVMCreateTargetData" "LLVMTargetDataRef" (
        ("StringRep" "const char *")
    ))
-   ("LLVMAddTargetData" "void" (
+   ("LLVMDisposeTargetData" "void" (
        ("TD" "LLVMTargetDataRef")
-       ("PM" "LLVMPassManagerRef")
    ))
    ("LLVMAddTargetLibraryInfo" "void" (
        ("TLI" "LLVMTargetLibraryInfoRef")
@@ -2395,9 +2729,6 @@
        ("StructTy" "LLVMTypeRef")
        ("Element" "unsigned int")
    ))
-   ("LLVMDisposeTargetData" "void" (
-       ("TD" "LLVMTargetDataRef")
-   ))
    ("LLVMGetFirstTarget" "LLVMTargetRef" (
    ))
    ("LLVMGetNextTarget" "LLVMTargetRef" (
@@ -2450,7 +2781,7 @@
    ("LLVMGetTargetMachineFeatureString" "char *" (
        ("T" "LLVMTargetMachineRef")
    ))
-   ("LLVMGetTargetMachineData" "LLVMTargetDataRef" (
+   ("LLVMCreateTargetDataLayout" "LLVMTargetDataRef" (
        ("T" "LLVMTargetMachineRef")
    ))
    ("LLVMSetTargetMachineAsmVerbosity" "void" (
@@ -2476,8 +2807,6 @@
    ("LLVMAddAnalysisPasses" "void" (
        ("T" "LLVMTargetMachineRef")
        ("PM" "LLVMPassManagerRef")
-   ))
-   ("LLVMLinkInJIT" "void" (
    ))
    ("LLVMLinkInMCJIT" "void" (
    ))
@@ -2539,22 +2868,6 @@
        ("SizeOfOptions" "size_t")
        ("OutError" "char **")
    ))
-   ("LLVMCreateExecutionEngine" "LLVMBool" (
-       ("OutEE" "LLVMExecutionEngineRef *")
-       ("MP" "LLVMModuleProviderRef")
-       ("OutError" "char **")
-   ))
-   ("LLVMCreateInterpreter" "LLVMBool" (
-       ("OutInterp" "LLVMExecutionEngineRef *")
-       ("MP" "LLVMModuleProviderRef")
-       ("OutError" "char **")
-   ))
-   ("LLVMCreateJITCompiler" "LLVMBool" (
-       ("OutJIT" "LLVMExecutionEngineRef *")
-       ("MP" "LLVMModuleProviderRef")
-       ("OptLevel" "unsigned int")
-       ("OutError" "char **")
-   ))
    ("LLVMDisposeExecutionEngine" "void" (
        ("EE" "LLVMExecutionEngineRef")
    ))
@@ -2585,19 +2898,9 @@
        ("EE" "LLVMExecutionEngineRef")
        ("M" "LLVMModuleRef")
    ))
-   ("LLVMAddModuleProvider" "void" (
-       ("EE" "LLVMExecutionEngineRef")
-       ("MP" "LLVMModuleProviderRef")
-   ))
    ("LLVMRemoveModule" "LLVMBool" (
        ("EE" "LLVMExecutionEngineRef")
        ("M" "LLVMModuleRef")
-       ("OutMod" "LLVMModuleRef *")
-       ("OutError" "char **")
-   ))
-   ("LLVMRemoveModuleProvider" "LLVMBool" (
-       ("EE" "LLVMExecutionEngineRef")
-       ("MP" "LLVMModuleProviderRef")
        ("OutMod" "LLVMModuleRef *")
        ("OutError" "char **")
    ))
@@ -2624,6 +2927,14 @@
    ("LLVMGetPointerToGlobal" "void *" (
        ("EE" "LLVMExecutionEngineRef")
        ("Global" "LLVMValueRef")
+   ))
+   ("LLVMGetGlobalValueAddress" "uint64_t" (
+       ("EE" "LLVMExecutionEngineRef")
+       ("Name" "const char *")
+   ))
+   ("LLVMGetFunctionAddress" "uint64_t" (
+       ("EE" "LLVMExecutionEngineRef")
+       ("Name" "const char *")
    ))
    ("LLVMCreateSimpleMCJITMemoryManager" "LLVMMCJITMemoryManagerRef" (
        ("Opaque" "void *")
@@ -2681,6 +2992,12 @@
    ("LLVMAddAggressiveDCEPass" "void" (
        ("PM" "LLVMPassManagerRef")
    ))
+   ("LLVMAddBitTrackingDCEPass" "void" (
+       ("PM" "LLVMPassManagerRef")
+   ))
+   ("LLVMAddAlignmentFromAssumptionsPass" "void" (
+       ("PM" "LLVMPassManagerRef")
+   ))
    ("LLVMAddCFGSimplificationPass" "void" (
        ("PM" "LLVMPassManagerRef")
    ))
@@ -2732,6 +3049,9 @@
    ("LLVMAddPartiallyInlineLibCallsPass" "void" (
        ("PM" "LLVMPassManagerRef")
    ))
+   ("LLVMAddLowerSwitchPass" "void" (
+       ("PM" "LLVMPassManagerRef")
+   ))
    ("LLVMAddPromoteMemoryToRegisterPass" "void" (
        ("PM" "LLVMPassManagerRef")
    ))
@@ -2776,6 +3096,9 @@
        ("PM" "LLVMPassManagerRef")
    ))
    ("LLVMAddTypeBasedAliasAnalysisPass" "void" (
+       ("PM" "LLVMPassManagerRef")
+   ))
+   ("LLVMAddScopedNoAliasAAPass" "void" (
        ("PM" "LLVMPassManagerRef")
    ))
    ("LLVMAddBasicAliasAnalysisPass" "void" (

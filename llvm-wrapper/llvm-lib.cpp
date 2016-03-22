@@ -18,11 +18,11 @@ extern "C" DLL_EXPORT void _LLVMLinkInInterpreter() { LLVMLinkInInterpreter(); }
 extern "C" DLL_EXPORT void _LLVMLinkInMCJIT() { LLVMLinkInMCJIT(); }
 
 extern "C" DLL_EXPORT LLVMModuleRef _LLVMModuleCreateWithName(const char *ModuleID) { return LLVMModuleCreateWithName(ModuleID); }
-extern "C" DLL_EXPORT LLVMExecutionEngineRef _LLVMCreateExecutionEngine(LLVMModuleProviderRef MP)
+extern "C" DLL_EXPORT LLVMExecutionEngineRef _LLVMCreateExecutionEngine(LLVMModuleRef MP)
 {
 	char* error;
 	LLVMExecutionEngineRef EE = NULL;
-	LLVMCreateExecutionEngine(&EE,MP,&error);
+	LLVMCreateExecutionEngineForModule(&EE,MP,&error);
 	return EE;
 }
 extern "C" DLL_EXPORT LLVMGenericValueRef _LLVMRunFunction(LLVMExecutionEngineRef EE, LLVMValueRef F)
