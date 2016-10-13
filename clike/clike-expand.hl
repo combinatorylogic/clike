@@ -202,14 +202,14 @@ function clike_expand_core_code(e)
 ///\commentbox{A shortcut for defining Clike typed macros in the default macro environment}\\
 #(macro clike_deftexpander (name args . body)
     `(hashput clike_default_mcenv ,(S<< " :typexpander: " name)
-        (fun (env return_type macro-body)
+        (fun (env return_type macro-body macroenv)
            (format macro-body ,args
               ,@body))))
 
 ///\commentbox{A shortcut for defining Clike typing rules in the default macro environment}\\
 #(macro clike_deftrules (name args . body)
     `(hashput clike_default_mcenv ,(S<< " :typrules: " name)
-        (fun (env macro-body)
+        (fun (env macro-body macroenv)
            (format macro-body ,args
               ,@body))))
 

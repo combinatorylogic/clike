@@ -1,0 +1,112 @@
+% literate:
+
+
+\pfcode{
+parser genssa2_intrinsic () {
+  @ni1tkn := (!":" .)+;
+  ni1 := [ni1tkn]:s => $sval(s);
+  genssa2_intrinsic := { [ni1]:l ":" [ni1]:r => pair(l,r) }
+                    /  [ni1];
+}
+
+function genssa2_to_ll_parse_intrinsic(dst) {
+  ret = parse %S<<(dst) as genssa2_intrinsic;
+  match ret with
+     pair(l,r) -> l:r
+   | e -> e:[]}}
+
+
+\pfcode{
+%"Reverse transform from genssa2 back to ir2"
+function genssa2_to_ll(src0, src, types) {
+  doconst(tp, vl) = {
+     match vl with
+        'ir2_type'(t) -> t
+     |  'zero'('ir2_type'(t)) ->  'zero'(t)
+     |  'sizeof'('ir2_type'(t)) -> 'sizeof'(t)
+     |  else -> vl
+  };
+  doother(tp, vl) = doconst(tp, vl);
+  gettype(dstreg) = {
+     aif(chk = ohashget(types, dstreg)) chk
+     else 'alias'('*unknown*')};
+  docall(dst, attr, args) = {
+   <pdst:rest> = genssa2_to_ll_parse_intrinsic(dst);
+    case pdst {
+     |  'ir2-string' -> 'string'(@args)
+     |  'ir2-volatile_store' -> 'volatile_store'(@args)
+     |  'ir2-store' -> 'store'(@args)
+     |  'ir2-binop' -> 'binary'(rest, @args)
+     |  'ir2-extractelement' -> 'extractelement'(@args)
+     |  'ir2-insertelement' -> 'insertelement'(@args)
+     |  'ir2-shufflevector' -> 'shufflevector'(@args)
+     |  'ir2-extractvalue' -> 'extractvalue'(@args)
+     |  'ir2-insertvalue' -> 'insertvalue'(@args)
+     |  'ir2-alloca' -> 'alloca'(@args)
+     |  'ir2-load' -> 'load'(@args)
+     |  'ir2-getelementptr' -> {
+             <[ptr;@idxs]> = args;
+              'getelementptr'(ptr, idxs)}
+     |  'ir2-getelementptr_inbounds' -> {
+             <[ptr;@idxs]> = args;
+              'getelementptr_inbounds'(ptr, idxs)}
+     |  'ir2-convop' -> 'convop'(rest, @args)
+     |  'ir2-icmp' -> 'icmp'(rest, @args)
+     |  'ir2-fcmp' -> 'fcmp'(rest, @args)
+     |  'ir2-call' -> 'call'(@args)
+     |  'ir2-callptr' -> 'callptr'(@args)
+     |  'ir2-callptrstd' -> 'callptrstd'(@args)
+     |  'ir2-ptr' -> 'ptr'(@args)
+     |  'ir2-inline' -> {
+           <[t;cde;@rargs]> = args;
+            'inline'(t,rargs, cde)
+         }
+
+     |  'ir2-ret' -> 'TERM'('ret'(@args))
+     |  'ir2-vret' -> 'TERM'('vret'(@args))
+     |  else -> ccerror('ERROR'(dst,@args))
+     }};
+
+  splitops(ops) =
+    collector(ladd, lget)
+    collector(radd, rget) {
+       iter o in ops do {
+         match o with
+            [nm;TERM(t)] -> radd(t)
+          | else -> ladd(o)};
+       r0 = rget();
+       r = if(r0) car(r0) else [];
+       return [lget(); r]};
+
+  dobody() = 
+    visit:genssa2(top:src) {
+       deep top { f -> body };
+       deep bblock {
+         b -> {
+               <[ops1;term1]> = splitops(ops);
+                'bblock'(name, ops1, if(term1) term1 else t)}};
+       deep oppair: [name; op(name)];
+       deep phiarg { a -> [v; src]};
+       deep iop(dstreg) {
+         phi -> 'phi'(gettype(dstreg), @args)
+       | select -> 'select'(cnd, t, f)
+       | call -> docall(dst, a, args)};
+       deep expr {
+         var -> 'var'(id)
+       | glob -> 'global'(id)
+       | const -> doconst(t, v)
+       | other -> doother(t, v)};
+       deep term {
+         br -> 'br_label'(dst)
+       | brc -> 'br'(c, tr, fl)
+       | switch -> 'switch'(v, d, ns)
+       | none -> 'unreacheable'()}};
+  newbody = dobody();
+  return visit:ir2(irtoplevel: src0) {
+    once irtoplevel {
+      %function -> mk:node(body = newbody, annotations = [])
+    | else -> node}}}}
+
+
+
+%%%%%%%%%%%%%%%%%%%%

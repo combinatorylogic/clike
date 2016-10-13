@@ -1,5 +1,3 @@
-// Mocking the LLVM pass manager, ha ha ha
-
 function ir2_bodypass(mdl, fn)
    visit:ir2(irmodule: mdl) {
       once irtoplevel {

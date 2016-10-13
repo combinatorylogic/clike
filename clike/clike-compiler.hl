@@ -3,6 +3,42 @@
 \section{Compiler}
 
 \pfcode{
+function clike_eval_bin(op, l, r) {
+   match op with
+     'add' -> l+r
+   | else -> ccerror('UNSUPPORTED-CONSTOP'(op, l, r))}}
+
+\pfcode{
+function clike_get_zero(tp)
+  visit:clike(lltype: tp) {
+  once lltype {
+    integer -> 0
+  | ptr -> []
+  | else -> ccerror('CLIKE-UNSUPPORTED-ZERO'(tp))}}}
+
+\pfcode{
+function clike_eval_constexpr(env, e) {
+  tobool(i) =
+     match i with
+        0 -> []
+      | else -> true;
+  visit:clike(llexpr: e) {
+    deep llexpr {
+      const -> c
+    | globstring -> s
+    | logand -> foldl(fun(l,r) l&&tobool(r), true, es)
+    | logor -> foldl(fun(l,r) l||tobool(r), true, es)
+    | bin -> clike_eval_bin(op, l, r)
+    | else -> ccerror('NOT-A-CONSTANT-EXPR'(node))};
+    deep llconst {
+      null -> []
+    | integer -> v
+    | string -> s
+    | zero -> clike_get_zero(t)
+    | else -> ccerror('UNSUPPORTED-CONSTEXPR'(node))}}}}
+
+
+\pfcode{
 ///\commentbox{Compiles a CLike type into LLVM type}\\
 function clike_c_type(env, tp)
          clike_c_type0(env, tp, [])
@@ -20,7 +56,9 @@ function clike_c_type0(env, tp, arrp)
                 void() -> 'pointer'('integer'('i8'))
               | else -> 'pointer'(t) )
    | fun -> if(va) 'varfunction'(ret,@args) else 'function'(ret,@args)
-   | array -> if(arrp) 'array'(dims, t) else 'pointer'(t)
+   | array -> if(arrp) 'array'(map d in dims do
+                                 clike_eval_constexpr(env, d), t)
+              else 'pointer'(t)
    | void -> node
    | else -> ccerror('CLIKE:TODO'(node))
   };
@@ -91,6 +129,8 @@ function clike_convop_llvm(tto, tfrom)
      | ptr(p1):ptr(p2) -> if(clike_type_iso(p1,p2)) [] else 'BitCast'
      | array(t1,@_):ptr(t2) -> if(clike_type_iso(t1,t2)) [] else 'BitCast'
      | ptr(t1):array(t2,@_) -> if(clike_type_iso(t1,t2)) [] else 'BitCast'
+     | integer(@_):ptr(@_) -> 'BitCast'
+     | ptr(@_):integer(@_) -> 'BitCast'
      | else -> ccerror('CLIKE:UNSUPPORTED-CAST'(tfrom,tto))
 }
 
@@ -515,25 +555,29 @@ function clike_lift_2(add, expr)
         val -> node
       | liftstatements -> cdr(e)
       | else -> {
-          newnm = gensym();
-          add('set'(newnm,'_':clike_lift_2(add, node)));
-          return 'val'('var'(newnm))
-        }
-     }
-  }
+          tp = caar(stack);
+          lexpr = clike_lift_2(add, node);
+          match tp with
+             void() -> {add('set'("", tp:lexpr)); return 'val'('zero'('void'()))}
+           | else -> symbols(newnm) {
+                add('set'(newnm, tp:lexpr));
+                return 'val'('var'(newnm))}}}}
 
 ///\commentbox{The same as above, but the topmost expression is also lifted as a variable binding}\\
-function clike_lift_3(add, expr)
+function clike_lift_3(add, expr, toptp)
   visit:clike3(llexpr1: expr) {
      once llstmt2 : forall add(clike_lift_1(node));
      deep llexpr1 {
         val -> node
       | liftstatements -> cdr(e)
       | else -> {
-          newnm = gensym();
-          add('set'(newnm,'_':clike_lift_2(add, node)));
-          return 'val'('var'(newnm))
-        }}}
+          tp = if(stack) caar(stack) else toptp;
+          lexpr = clike_lift_2(add, node);
+          match tp with
+             void() -> {add('set'("", tp:lexpr)); return 'val'('zero'('void'()))}
+           | else -> symbols(newnm) {
+                add('set'(newnm, tp:lexpr));
+                return 'val'('var'(newnm))}}}}
 
 ///\commentbox{A compilation pass: flatten all the expression trees}\\
 function clike_lift_1(code)
@@ -547,7 +591,7 @@ function clike_lift_1(code)
              })}
        | else -> {
          add(visit:clike3(llstmt2: node) {
-                once llexpr1 : forall clike_lift_3(add, node)
+                once llexpr1 : forall clike_lift_3(add, node, caar(stack))
              })
        }
       }};

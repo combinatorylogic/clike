@@ -1,0 +1,57 @@
+\documentclass{article}
+\usepackage{alltt}
+\usepackage{rotating}
+\usepackage[usenames]{color}
+\usepackage[framemethod=tikz]{mdframed}
+
+\global\mdfdefinestyle{codeblock}{%
+    outerlinewidth=2pt,innerlinewidth=0pt,
+    outerlinecolor=gray,roundcorner=3pt
+}
+
+
+
+\newcommand{\colobox}[1]{
+\begin{tikzpicture}
+[execute at end picture=%
+{
+\begin{pgfonlayer}{background}
+\path[fill=black!10,thick,draw=black!40,rounded corners=0.8mm]
+(current bounding box.south west) rectangle
+(current bounding box.north east);
+\end{pgfonlayer}
+}]
+\node (box) {
+\begin{minipage}{\textwidth}
+#1
+\end{minipage}
+};
+\end{tikzpicture}\\}
+
+\newcommand{\commentbox}[1]{\colobox{\sl #1}}
+
+\newcommand{\lspspc}{{\color{white}{\tt{\_}}}}
+\newcommand{\lsplp}{(}
+\newcommand{\lsprp}{)}
+
+\newcommand{\docstring}[1]{\sl #1}
+\newcommand{\docentry}[1]{\sl #1}
+
+\newenvironment{pfcodeblock}[1]{}{}
+\newcommand{\pfcodeblockbegin}{\begingroup\setlength{\parindent}{0cm}\vskip1mm\begin{mdframed}[style=codeblock]}
+\newcommand{\pfcodeblockend}{\end{mdframed}\vskip1mm\endgroup}
+
+
+\definecolor{light-gray}{gray}{0.5}
+
+\begin{document}
+\setlength{\parindent}{0pt} 
+
+\tableofcontents
+
+\newpage
+
+\newcommand*{\docpath}{../backend}%
+\input{\docpath/ssa-fold}
+
+\end{document}

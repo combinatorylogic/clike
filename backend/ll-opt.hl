@@ -1,0 +1,18 @@
+% literate:
+
+\section{Using the generic SSA library for optimisations}
+
+\phcode{include "./ssa-fold-ast.hl"}
+\phcode{litinclude ("./ll-opt-there") "./ll-opt-there.hl"}
+\phcode{litinclude ("./ll-opt-back") "./ll-opt-back.hl"}
+\phcode{litinclude ("./ll-opt-model") "./ll-opt-model.hl"}
+
+\pfcode{
+function ll_genssa_opt(globenv, src) {
+   g2 = ll_to_genssa2(src);
+  <g3ht:g3> = genssa2_process(ll_env, globenv, g2);
+   g4 = genssa2_to_ll(src, g3, g3ht);
+   return g3ht:g4
+}}
+
+%%%%%%%%%%%%%%%%

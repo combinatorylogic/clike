@@ -1,0 +1,32 @@
+% literate:
+
+\pfcode{
+ast genssa2 {
+  top = f(globident:nm, type:ret, *argpair:args, code:body);
+  code is (.*bblock:bs);
+  argpair is (type:t, ident:name);
+  bblock =
+    b(labident:name, *oppair:ops, term:t);
+  oppair is (varident:name, iop:op);
+  iop = phi(.*phiarg:args)
+      | select(expr:cnd, expr:t, expr:f)
+      | call(*attr:a, iident:dst, .*expr:args)
+      ;
+  switchdst is (expr:v, labident:l);
+  term = br(labident:dst)
+       | brc(expr:c, labident:tr, labident:fl)
+       | switch(expr:v, labident:d, .*switchdst:ns)
+       | none()
+       ;
+  expr = var(varident:id)
+       | glob(globident:id)
+       | const(type:t, any:v)
+       | other(type:t, any:v)
+       ;
+  phiarg = a(labident:src, expr:v);
+  attr = constcall() | sideeffects() | intrinsic() | external();
+  varident is id:v;
+  labident is id:v;
+}}
+
+%%%%%%%%%

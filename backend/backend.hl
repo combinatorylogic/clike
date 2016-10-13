@@ -4,6 +4,7 @@ include "./ssa-ast.hl"
 include "./ll-ast.hl"
 include "./ll-typing.hl"
 include "./ll-inline.hl"
+include "./ll-opt.hl"
 
 include "./ir2ssa.hl"
 include "./passmgr.hl"

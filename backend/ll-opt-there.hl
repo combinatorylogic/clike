@@ -1,0 +1,88 @@
+% literate:
+
+
+\subsection{IL2 $\to$ genssa2}
+
+
+\pfcode{
+function ll_isconst(v)
+  visit:ir2(irval: v){
+    once irval {
+       var -> []
+     | global -> []
+     | globalfun -> []
+     | else -> true}}}
+
+\pfcode{
+function ll_to_genssa2(src) {
+  mktype(t) = 'const'('ir2type'(), t);
+  mkterm(dst, t) = [[%Sm<<(dst, "___TERM");t]];
+  visit:ir2(irtoplevel: src) {
+     deep irtoplevel {
+        %function -> 'f'(name, ret, args, body)
+      | else -> ccerror('IMPOSSIBLE')};
+     deep ircode: bs;
+     once irtype { else -> 'ir2_type'(node) };
+     deep irbblock {
+        bblock -> {
+          <[xx; t1]> = t(name);
+           'b'(name, c::xx, t1)}};
+     deep irarg: {[type; name]};
+     deep irpair: {[nm; e]};
+     deep irval {
+        var -> 'var'(nm)
+      | else -> if (ll_isconst(node)) 'const'('ir2const'(), node) else 'other'('ir2'(),node)
+     };
+     deep irphi: {'a'(dst, value)};
+     deep irexpr { // -> iop
+        phi -> 'phi'(@dsts)
+      | string -> 'call'([], 'ir2-string', 'const'('ir2string'(), s))
+      | volatile_store -> 'call'([], 'ir2-volatile_store',
+                                     mktype(t),
+                                     value, mktype(ty),
+                                     ptr, @align)
+      | store -> 'call'([], 'ir2-store', ptr, e)
+      | binary -> 'call'([], %Sm<<('ir2-binop:',op), l, r)
+      | extractelement -> 'call'([], 'ir2-extractelement',
+                                     'const'('int'(),n),
+                                     v, idx)
+      | insertelement -> 'call'([], 'ir2-insertelement',
+                                    'const'('int'(), n),
+                                    mktype(t),
+                                    v, elt, idx)
+      | shufflevector -> 'call'([], 'ir2-shufflevector',
+                                    'const'('int'(), n1),
+                                    val1,
+                                    'const'('int'(), n2),
+                                    val2, mask)
+                                    
+      | extractvalue -> 'call'([], 'ir2-extractvalue', 'const'('ir2aggtype'(), t), v, idx)
+      | insertvalue -> 'call'([], 'ir2-insertvalue', v, mktype(tv), elt, idx)
+      | alloca -> 'call'([], 'ir2-alloca', mktype(t))
+      | load -> 'call'([], 'ir2-load', ptr)
+      | getelementptr -> 'call'([], 'ir2-getelementptr', ptr, @idxs)
+      | getelementptr_inbounds -> 'call'([], 'ir2-getelementptr_inbounds', ptr, @idxs)
+      | convop -> 'call'([], %Sm<<('ir2-convop:', op), v, mktype(t))
+      | icmp -> 'call'([], %Sm<<('ir2-icmp:', vcond), lhs, rhs)
+      | fcmp -> 'call'([], %Sm<<('ir2-fcmp:', vcond), lhs, rhs)
+      | select ->
+                'select'(vif, vthen, velse)
+      | call -> 'call'(['external'()], 'ir2-call', 'other'('globfun'(), fn),@args)
+      | callptr -> 'call'([], 'ir2-callptr', fn, @args)
+      | callptrstd -> 'call'([], 'ir2-callptrstd', fn, @args)
+      | ptr -> 'call'([], 'ir2-ptr', src, mktype(dst))
+      | inline -> 'call'([], 'ir2-inline', mktype(t), 'const'('ir2inline'(), code), @args)
+     };
+     deep irterm(dst) {
+       ret -> [mkterm(dst, 'call'([], 'ir2-ret', value)); 'none'()]
+     | vret -> [mkterm(dst, 'call'([], 'ir2-vret')); 'none'()]
+     | br -> [[]; 'brc'(cnd, tr, fl)]
+     | br_label -> [[]; 'br'(nm)]
+     | switch -> [[]; 'switch'(value, els, @cases)]
+     | else -> ccerror('UNSUPPORTED')
+     };
+     deep irswitchdst: {[value; dst]};
+  }}}
+
+
+%%%%%%

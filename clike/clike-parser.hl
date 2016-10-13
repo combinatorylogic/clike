@@ -140,7 +140,7 @@ parser pfclike ( pfront ) {
          /  { "::fun" [cltype]:t "(" ecslist<[cltype],",">:args ")" => fun(t, $nil(), @args) }
          /  { [cltype]:t "*" => ptr(t) }
          /  { [cltype]:t "[" "]" => ptr(t) }
-         /  { [cltype]:t "[" [clnumber]:n "]" => array(t,$wrap(n)) }
+         /  { [cltype]:t "[" [clexpr]:n "]" => array(t,$wrap(n)) }
          /  [cltypebase]
          ;
 
@@ -155,7 +155,7 @@ parser pfclike ( pfront ) {
 
   clvarnamex :=
             { [clvarnamex]:t "[" "]" => ptr(t) }
-         /  { [clvarnamex]:t "[" [clnumber]:n "]" => array(t,$wrap(n)) }
+         /  { [clvarnamex]:t "[" [clexpr]:n "]" => array(t,$wrap(n)) }
          /  { "(" "*" [clvarnamex]:t ")" "(" ecslist<[cltype],",">:args ")" => 
               ptr(fun(t,$nil(),@args)) }///\footnote{A special case: function pointer definition}\\
          /  [clvarnameatom];
@@ -369,6 +369,8 @@ parser pfclike ( pfront ) {
                     => {mode=expr} stdcallpfx(callptr($source(), fn,@args)) }
             /   { [clqident]:fn "(" ecslist<[clexpr0],",">:args ")" =>
                     {mode=expr} call($source(), fn,@args) }
+            /   { "(" [cltype]:t ")" [clexpr0]:e => typecast(t,e) }
+
             /   { "(" [cllvalue]:fn ")" "(" ecslist<[clexpr0],",">:args ")"
                     => {mode=expr} callptr($source(), fn,@args) }
             /   [clprimexpratom_inner]
@@ -392,8 +394,7 @@ parser pfclike ( pfront ) {
 
   ///\commentbox{Atom expressions --- please note that {\tt ::expr} entry is defined here, not at the expression entry node}\\
   clatomexpr :=
-                { "(" [cltype]:t ")" [clexpr]:e => typecast(t,e) }
-            /   { "(" [clexpr]:e ")" => e }
+                { "(" [clexpr]:e ")" => e }
             /   { inblock "{" eslist<[clcode]>:es "}" => 
                   {mode = expr} protoinblock($source(),@es) }
             /   { "&" [clatomexpr]:e => ref(e) }

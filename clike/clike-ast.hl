@@ -171,7 +171,7 @@ ast clike {
    lltypepatch =
      | ptr(lltypepatch:t)
      | fun(lltypepatch:ret, bool:va, .*lltype:args)
-     | array(lltypepatch:t, .*int:dims)
+     | array(lltypepatch:t, *llconstexpr:dims)
      | v(ident:nm)
      ;
 
@@ -184,7 +184,7 @@ ast clike {
      | structref(ident:nm)
      | ptr(lltype:t,.*aspace:spc)
      | fun(lltype:ret, bool:va, .*lltype:args)
-     | array(lltype:t, *int:dims, .*aspace:spc)
+     | array(lltype:t, *llconstexpr:dims, .*aspace:spc)
      | string()
      | void()
 
@@ -201,6 +201,7 @@ ast clike {
      | arg(lltype:t)
      | nop()
      ;
+   llconstexpr is (.llexpr:e);
 }
 }
 
@@ -211,9 +212,11 @@ ast clike {
 
 \pfcode{
 ast clike2 : clike ( llexpr -> lloexpr, lvalue -> olvalue,
-                     llvarname -> ollvarname ) {
+                     llvarname -> ollvarname,
+                     llconstexpr -> ollconstexpr) {
    llexpr is (lltype:t , . lloexpr:e);
    lvalue is (lltype:t , . olvalue:e);
+   llconstexpr is any:v;
 }
 }
 

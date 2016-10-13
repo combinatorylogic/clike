@@ -4,12 +4,12 @@
 
 
 \pfcode{
-function ll_env_getglobal(env,types, nm) {
+function ll_env_getglobal(env, nm) {
   return ohashget(env, %Sm<<("global-type: ", nm))
 }}
 
 \pfcode{
-function ll_env_fun_retval(env,types, nm) {
+function ll_env_fun_retval(env, nm) {
   return ohashget(env, %Sm<<("function-ret-type: ", nm))
 }}
 
@@ -32,7 +32,7 @@ function ll_fun_retval(fntp)
 }
 
 \pfcode{
-function ll_value_type_inner(env, types, vl) {
+function ll_value_type_inner(env, types, vl)
   visit:ir2(irval: vl) {
      once irval {
         false -> 'integer'('i32')
@@ -52,33 +52,41 @@ function ll_value_type_inner(env, types, vl) {
           if (chk1) { // known local variable
              return chk1
           } else { // undiagnosed global?
-             chk2 = ll_env_getglobal(env, types, nm);
+             chk2 = ll_env_getglobal(env, nm);
              if (chk2) return 'pointer'(chk2)
-             else ccerror('CLIKE:LL:CANNOTTYPE'(vl))
-          }
-        }
+             else []}}
       | global -> {
-          chk1 = ll_env_getglobal(env, types, nm);
+          chk1 = ll_env_getglobal(env, nm);
           if (chk1) return 'pointer'(chk1)
-          else ccerror('CLIKE:LL:CANNOTTYPE'(vl))
-        }
-      | else -> ccerror('CLIKE:LL:CANNOTTYPE'(vl))
-     }
-  }
-}}
+          else []}
+      | else -> []}}}
 
 \pfcode{
-function ll_value_type(env, types, vl) {
+function ll_value_type_0(env, types, vl, vis) {
   tp = ll_value_type_inner(env, types, vl);
   match tp with
     delay(nm, fn) -> {
       ohashput(types, nm, []); // anti cycle
       ntp = fn(nm); 
       ohashput(types, nm, ntp);
-      return ntp
-    }
-  | else -> tp
-}}
+      return ntp}
+  | tryany(nm, @tps) ->
+    if (not(ohashget(vis, nm))) {
+      ohashput(vis, nm, nm); // anti cycle
+      ohashput(types, nm, []); // anti cycle
+      do loop (ts = tps) {
+         match ts with
+           [d;hd]: tl ->
+              aif(chk = hd()) {
+                 ohashput(types, nm, chk);
+                 chk}
+              else loop(tl)
+         | else -> []}}
+  | else -> tp}}
+
+\pfcode{
+function ll_value_type(env, types, vl)
+   ll_value_type_0(env, types, vl, mkhash())}
 
 \pfcode{
 function ll_numeric_constant(v)
@@ -115,6 +123,11 @@ function ll_destruct_gep(tp, idxs) {
 function ll_propagate_types_fun(env, fn) {
   types = mkhash();
   bind(nm, tp) = ohashput(types, nm, tp);
+  is_unknown(tp) =
+     visit:ir2(irtype: tp) {
+        once irtype {
+           alias -> id === '*unknown*'
+         | else -> []}};
   visit:ir2(irtoplevel:fn) {
     deep irarg: bind(name, type);
     deep irpair: ohashput(types, nm, 'delay'(nm, e));
@@ -140,10 +153,18 @@ function ll_propagate_types_fun(env, fn) {
     | convop -> fun(dst) bind(dst, t)
     | icmp -> fun(dst) bind(dst, 'integer'('i32')) // boolean?
     | fcmp -> fun(dst) bind(dst, 'integer'('i32'))
-    | phi -> fun(dst) bind(dst, t)
+    | phi -> fun(dst) {
+                  // After a genssa2 round trip, we'll have broken phi types everywhere.
+                  vis = mkhash();
+                  if (is_unknown(t)) {
+                     bind(dst,
+                      'tryany'(dst, @map d in dsts do
+                                [d;fun()
+                                    ll_value_type_0(env, types, car(d), vis)]))
+                  } else bind(dst, t)}
     | select -> fun(dst) bind(dst, ll_value_type(env, types, vthen))
     | call -> fun(dst) {
-        tp = ll_env_fun_retval(env, types, fn);
+        tp = ll_env_fun_retval(env, fn);
         bind(dst, tp)
       }
     | inline -> fun(dst) {
@@ -166,7 +187,7 @@ function ll_propagate_types_fun(env, fn) {
 }}
 
 \pfcode{
-function ll_propagate_types(mdl) {
+function ll_module_types(mdl) {
   env = mkhash();
   addglob(nm, tp) = {
     ohashput(env, %Sm<<("global-type: ", nm), tp)
@@ -184,6 +205,11 @@ function ll_propagate_types(mdl) {
      | eglobal -> addglob(name, type)
     }
   };
+  return env}}
+
+\pfcode{
+function ll_propagate_types(mdl) {
+  env = ll_module_types(mdl);
   types = mkhash();
   iter:ir2(irmodule:mdl) {
     deep irtoplevel {
@@ -197,6 +223,12 @@ function ll_propagate_types(mdl) {
 
 \pfcode{
 function ll_annotate_geps_fun(env, types, src) {
+  is_unknown(tp) =
+     visit:ir2(irtype: tp) {
+        once irtype {
+           alias -> id === '*unknown*'
+         | else -> []}};
+
   visit:ir2(irtoplevel: src) {
      deep irpair: mk:node(e = e(nm));
      deep irexpr {
@@ -208,6 +240,11 @@ function ll_annotate_geps_fun(env, types, src) {
           tp = ll_value_type(env, types, ptr);
           mk:node(ptrtp = [tp]);
         }
+     |  phi -> fun(dst) {
+          if (is_unknown(t)) {
+            tp = ll_value_type(env, types, 'var'(dst));
+            if (tp) mk:node(t = tp) else node}
+          else node}
      |  else -> fun(dst) node
      }}}
 

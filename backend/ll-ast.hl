@@ -87,7 +87,7 @@ ast ir2 {
    | binary(irbinop:op, irval:l, irval:r)
    | extractelement(int:n, irval:v, irval:idx)
    | insertelement(int:n, irtype:t, irval:v, irval:elt, irval:idx)
-   | shufflevector(int:n1, irval:val1, int:n1, irval:val2, irval:mask)
+   | shufflevector(int:n1, irval:val1, int:n2, irval:val2, irval:mask)
    | extractvalue(iraggtype:t, irval:v, irval:idx)
    | insertvalue(irval:v, irtype:tv, irval:elt, irval:idx)
    | alloca(irtype:t)

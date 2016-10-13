@@ -5,12 +5,13 @@
  N.B. ---- a typed macros expansion step is performed within this pass as well.
 
 \pfcode{
-function clike_types_inner (env, c, toploop)
+function clike_types_inner (env, c, toploop, rettype)
 {
    vars = mkhash();
    do loop(c0 = c)
     visit:clike(llcode: c0)
     {
+       once lltype { else -> node}; // do not type constexprs there
        deep llvarname {
            v -> name
         |  p -> ccerror('CLIKE:WRONG-PASS'(node))
@@ -73,11 +74,13 @@ function clike_types_inner (env, c, toploop)
 
          // Applying type rules for a dual-stage macro:
          | typedmacro -> {
+              macroenv = mkref([]);
               rule = clike_env_gettypingrules(env, nm);
-              rtype = if(rule) rule(env, args) else [];
+              rtype = if(rule) rule(env, args, macroenv) else [];
               expander = clike_env_gettypedexpander(env, nm);
-              ncode_0 = expander(env, rtype, args); // args are going to be
-                  // stripped from types during this expansion
+              ncode_0 = expander(env, rtype, args, macroenv);
+                  // args are going to be stripped from types
+                  // during this expansion
               ncode = loop('passexpr'(ncode_0)); // redo the propagation
               return ncode
            }
@@ -106,6 +109,7 @@ function clike_types_inner (env, c, toploop)
          | for -> mk:node(cnd=clike_fix_bool(cnd))
          | do -> mk:node(cnd=clike_fix_bool(cnd))
          | while -> mk:node(cnd=clike_fix_bool(cnd))
+         | return -> mk:node(e=clike_fix_return(e, rettype))
          | else -> return node
        };
        deep lvalue {
@@ -136,20 +140,20 @@ function clike_types_inner (env, c, toploop)
   and it should not interfere later with casting compilation.
 
 \pfcode{
-function clike_clean_bools(code)
+function clike_clean_bools(code) {
   visit:clike2(llcode: code) {
      deep lltype {
         bool -> 'integer'('i32')
       | else -> node
      }
   }
-}
+}}
 
 
 \pfcode{
 ///\commentbox{An interface function, binds all the typing passes together}\\
-function clike_types (env, c, toploop)
-  clike_clean_bools(clike_types_inner(env,c,toploop))
+function clike_types (env, c, toploop, rettype)
+  clike_clean_bools(clike_types_inner(env,c,toploop, rettype))
 }
 
 \pfcode{

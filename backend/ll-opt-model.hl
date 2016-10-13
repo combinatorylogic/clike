@@ -1,0 +1,186 @@
+% literate:
+
+\section{Language model for the abstract SSA passes}
+
+\pfcode{
+function ll_const_type_c(lenv, vl) {
+  untype(t) = {
+     match t with
+        'ir2_type'(x) -> x
+      | else -> t};
+  visit:ir2(irval: vl) {
+     once irval {
+        false -> 'integer'('i32')
+      | true -> 'integer'('i32')
+      | sizeof -> 'integer'('i32')
+      | null -> untype(t)
+      | integer -> 'integer'(if(itp) car(itp) else 'i32')
+      | float -> 'float'(if(ftp) car(ftp) else 'f32')
+      | struct -> 'struct'(gensym(), @map [t;v] in elts do t)
+      | array -> 'array'(t, [length(elts)])
+      | zero -> untype(t)
+      | undef -> untype(t)
+      | blockaddress -> 'pointer'('void'()) // is it really?
+      | jumptable -> 'pointer'('integer'('i32')) // not quite
+      | var -> 'var'(nm)
+      | global -> {
+          chk1 = ll_env_getglobal(lenv, nm);
+          if (chk1) return 'pointer'(chk1)
+          else 'var'(nm)}
+      | else -> 'var'(%Sm<<("X1_",gensym()))}}}}
+}
+
+\pfcode{
+define ll_env = {
+  ht =  mkhash();
+  untype(t) = {
+     match t with
+        'ir2_type'(x) -> x
+      | else -> t};
+  getir2constval(c) =
+     visit:ir2(irval:c) { once irval {
+        false -> 0
+      | true -> 1
+      | null -> []
+      | integer -> v
+      | float -> %flt:parse(%S<<(v))
+      | zero -> 0 // TODO
+      | else -> {'unknown'(c)}
+     }};
+  getir2consttype(c) =
+     visit:ir2(irval:c) { once irval {
+        false -> 'boolean'()
+      | true -> 'boolean'()
+      | null -> t
+      | integer -> 'integer'(@itp)
+      | float -> 'float'(@ftp)
+      | zero  -> untype(t)
+      | else -> {'unknown'(c)}
+     }};
+  mkconst(tp, v) = {
+     match tp with
+        'integer'(@itp) -> 'const'('ir2const'(),'integer'(v,@itp))
+      | 'float'(@ftp) -> 'const'('ir2const'(),'float'(%->s(v),@ftp))
+      | 'boolean'() -> 'const'('ir2const'(), if(v==0) 'false'() else 'true'())
+      | else -> 'const'('ir2fail'(),'const'(tp,v)) //TODO
+  };
+  mkboolconst(v) =
+     if(v && not(v==0)) 'const'('ir2const'(), 'true'())
+     else 'const'('ir2const'(), 'false'());
+  gettype(t) = {match t with
+                 'const'(t0, ir2c) -> getir2consttype(ir2c)
+               | else -> {'unknown'(t)}};
+  getval(t) = {match t with
+                 'const'(t0, ir2c) -> getir2constval(ir2c)
+                | else -> {'unknown'(t)}};
+  istrueconst(t) = {
+     val = getval(t);
+     if (not(val) || val==0) [] else #t};
+  mkbinfun(f) =
+   fun(args) {
+     match args with
+        [l;r] -> {
+           tp = gettype(l);
+           vl = getval(l);
+           vr = getval(r);
+           return mkconst(tp, f(vl, vr))}};
+
+  mkboolfun(f) =
+    fun(args) {
+      match args with
+         [l;r] -> {
+            vl = getval(l);
+            vr = getval(r);
+            return mkboolconst(f(vl, vr))}};
+
+
+  typeqnfun(lenv, eqadd, dstreg, dst, args) = {
+   <l:r> = genssa2_to_ll_parse_intrinsic(dst);
+     eq(l, r) = eqadd('equals'(l, r));
+     setdst(r) = eq('var'(dstreg), r);
+     mkptr(t) = 'pointer'(t);
+     booltype = 'integer'('i32');
+     case l {
+     |  'ir2-string' -> []
+     |  'ir2-binop' -> {iter a in args do setdst(a)}
+     |  'ir2-extractelement' -> []
+     |  'ir2-insertelement' -> []
+     |  'ir2-shufflevector' -> []
+     |  'ir2-extractvalue' -> []
+     |  'ir2-insertvalue' -> []
+     |  'ir2-alloca' -> setdst(mkptr(car(args)))
+     |  'ir2-load' -> eq(car(args),mkptr('var'(dstreg)))
+     |  'ir2-getelementptr' -> []
+     |  'ir2-getelementptr_inbounds' -> []
+     |  'ir2-convop' -> setdst(cadr(args))
+     |  'ir2-icmp' -> {eq(car(args),cadr(args)); setdst(booltype)}
+     |  'ir2-fcmp' -> {eq(car(args),cadr(args)); setdst(booltype)}
+     |  'ir2-call' -> {fn = car(args);
+                       tp = ll_env_fun_retval(lenv, fn);
+                       if (tp) setdst(tp) else 'var'(gensym())}
+     |  'ir2-callptr' ->  []
+     |  'ir2-callptrstd' -> []
+     |  'ir2-ptr' -> []
+     |  'ir2-inline' -> []
+
+     |  'ir2-ret' -> eq(car(args), 'var'('*return*'))
+     |  'ir2-vret' -> []
+     }
+  };
+
+  typemkfun(lenv, t) = {
+     match t with
+        'ir2_type'(t) -> t
+      | else -> 'var'(%Sm<<("X3_",gensym()))};
+
+  ctypemkfun(lenv, t, c) = {
+     match t with
+        'ir2type'() -> typemkfun(lenv, c)
+      | 'int'() -> 'integer'('i32')
+      | 'ir2const'() -> ll_const_type_c(lenv, c)
+      | 'globfun'() -> c // special case, not a type
+      | else -> 'var'(%Sm<<("X2_",gensym()))};
+
+  iter [nm;c;p;efun;@rst] in [
+      ['ir2-binop:Add';1;1;mkbinfun( %+ );'add'];
+      ['ir2-binop:Sub';1;1;mkbinfun( %- );'sub'];
+      ['ir2-binop:Mul';1;1;mkbinfun( %* );'mul'];
+
+      ['ir2-binop:SRem';1;1;mkbinfun( fun(l,r) (l mod r) )];
+
+      ['ir2-binop:FAdd';1;1;mkbinfun( %f+ )];
+      ['ir2-binop:FSub';1;1;mkbinfun( %f- )];
+      ['ir2-binop:FMul';1;1;mkbinfun( %f* )];
+
+      
+
+
+      ['ir2-icmp:NE';1;1;mkboolfun( fun(l,r) l!=r );'neq'];
+      ['ir2-icmp:EQ';1;1;mkboolfun( fun(l,r) l==r );'eq'];
+      ['ir2-icmp:SLT';1;1;mkboolfun( %< );'lt'];
+      ['ir2-icmp:SLE';1;1;mkboolfun( %<= );'le'];
+      ['ir2-icmp:SGT';1;1;mkboolfun( %> );'gr'];
+      ['ir2-icmp:SGE';1;1;mkboolfun( %>= );'ge']
+      
+  ] do {
+     cls = if (rst) car(rst) else [];
+     ohashput(ht, nm, fun(tg) {
+        match tg with
+           'constantp' -> c
+         | 'purep' -> p
+         | 'evalfun' -> efun
+         | 'classify' -> cls})};
+  ohashput(ht, '*true?*', istrueconst);
+
+  ohashput(ht, '*boolean-type*', 'integer'('i32'));
+  ohashput(ht, '*type-maker*', typemkfun);
+  ohashput(ht, '*ctype-maker*', ctypemkfun);
+  ohashput(ht, '*type-equation-maker*', fun(dst) typeqnfun);
+
+  return ht};
+
+
+}
+
+
+%%%%%%%%%%

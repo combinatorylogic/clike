@@ -38,6 +38,7 @@ function clike_type_isa_pointer(t)
    | else -> []
 
 // Check if two types are identical
+// TODO: check array dimensions
 function clike_type_iso(a, b)
  do loop(t1=a, t2=b) {
    match t1:t2 with
@@ -257,6 +258,16 @@ function clike_fix_settype(set,loc,l,r)
        ptr(t1):null() -> [set;loc;l;'ptr'(t1):'const'('null'())]
      | else -> [set;loc;l;clike_castto(lt,r)]
  }
+
+function clike_fix_return(e,lt)
+ {
+   rt = car(e);
+   if(clike_type_iso(lt,rt)) e
+     else
+     match lt:rt with
+       ptr(t1):null() -> 'ptr'(t1):'const'('null'())
+     | else -> clike_castto(lt,e) }
+
 
 // Inject casts into function arguments, if needed
 function clike_fix_funcall(call,LOC,fn, va, args, atps)

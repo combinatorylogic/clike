@@ -2485,8 +2485,6 @@
    ))
    ("LLVMInitializeBPFTargetInfo" "void" (
    ))
-   ("LLVMInitializeCppBackendTargetInfo" "void" (
-   ))
    ("LLVMInitializeHexagonTargetInfo" "void" (
    ))
    ("LLVMInitializeMipsTargetInfo" "void" (
@@ -2513,8 +2511,6 @@
    ))
    ("LLVMInitializeBPFTarget" "void" (
    ))
-   ("LLVMInitializeCppBackendTarget" "void" (
-   ))
    ("LLVMInitializeHexagonTarget" "void" (
    ))
    ("LLVMInitializeMipsTarget" "void" (
@@ -2540,8 +2536,6 @@
    ("LLVMInitializeARMTargetMC" "void" (
    ))
    ("LLVMInitializeBPFTargetMC" "void" (
-   ))
-   ("LLVMInitializeCppBackendTargetMC" "void" (
    ))
    ("LLVMInitializeHexagonTargetMC" "void" (
    ))

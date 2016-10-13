@@ -11,11 +11,12 @@ Pipeline is following:
    basic blocks extraction
 
 \pfcode{
-function clike_compile_code(toploop, env, code, rettype)
+function clike_compile_code(toploop, env, code, crettype, rettype)
 {
   clike_dbg(1, "S0:",code);
 
-  step1 = clike_types(env, code, toploop);   clike_dbg(1,"S1:",step1);
+  step1 = clike_types(env, code, toploop, crettype);
+                                             clike_dbg(1,"S1:",step1);
   step2 = clike_precompile(env, step1);      clike_dbg(2,"S2:",step2);
   step3 = clike_fix_sets(step2);             clike_dbg(3,"S3:",step3);
   step3_1 = clike_lift_1(step3);             clike_dbg(4,"S3_1:",step3_1);
@@ -82,6 +83,7 @@ function clike_compile(etoploop, topenv, top)
                   clike_env_deffunction(topenv, name, va, ret, args);
                   rett =  clike_env_unitype(env, ret);
                   cbody = clike_compile_code(toploop,env,body,
+                                               rett,
                                                clike_c_type(env,rett));
                   clike_env_savebody(topenv, name, body, cbody);
                   cc1 = if(cc) ['stdcall'] else [];
