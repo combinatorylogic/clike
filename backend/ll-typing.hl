@@ -128,13 +128,18 @@ function ll_propagate_types_fun(env, fn) {
         once irtype {
            alias -> id === '*unknown*'
          | else -> []}};
+  arraydecay(tp) =
+     visit:ir2(irtype: tp) {
+        once irtype {
+           array -> t
+         | else -> node}};
   visit:ir2(irtoplevel:fn) {
     deep irarg: bind(name, type);
     deep irpair: ohashput(types, nm, 'delay'(nm, e));
     deep irexpr {
       string -> fun(dst) bind(dst, 'pointer'('integer'('i8')))
     | binary -> fun(dst) bind(dst, ll_value_type(env,types, l))
-    | alloca -> fun(dst) bind(dst, 'pointer'(t))
+    | alloca -> fun(dst) bind(dst, 'pointer'(arraydecay(t)))
     | load -> fun(dst) {
        tp = ll_value_type(env, types, ptr);
        vtp = ll_pointee_type(tp);

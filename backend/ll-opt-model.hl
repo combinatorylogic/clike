@@ -31,6 +31,10 @@ function ll_const_type_c(lenv, vl) {
 }
 
 \pfcode{
+function shlf(a, b)  notnet(int a, int b) {leave a<<b;}
+}
+
+\pfcode{
 define ll_env = {
   ht =  mkhash();
   untype(t) = {
@@ -146,6 +150,8 @@ define ll_env = {
       ['ir2-binop:Sub';1;1;mkbinfun( %- );'sub'];
       ['ir2-binop:Mul';1;1;mkbinfun( %* );'mul'];
 
+      ['ir2-binop:Shl';1;1;mkbinfun( %shlf )];
+
       ['ir2-binop:SRem';1;1;mkbinfun( fun(l,r) (l mod r) )];
 
       ['ir2-binop:FAdd';1;1;mkbinfun( %f+ )];
@@ -176,6 +182,9 @@ define ll_env = {
   ohashput(ht, '*type-maker*', typemkfun);
   ohashput(ht, '*ctype-maker*', ctypemkfun);
   ohashput(ht, '*type-equation-maker*', fun(dst) typeqnfun);
+
+  ohashput(ht, '*get-integer-constant*', fun(tp, vl) {
+      match vl with integer(x,@_) -> x | else -> []});
 
   return ht};
 

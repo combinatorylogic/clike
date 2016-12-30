@@ -79,14 +79,16 @@ function clike_compile(etoploop, topenv, top)
                    }
       | cfunc -> {
                   env = clike_local_env(topenv, args);
-                  clike_dbg(0,"Top:",#`(cfunc: ,name ,ret ,@args));
+                  clike_dbg(0,"Top:",#`(cfunc: ,name ,cc ,ret ,@args));
                   clike_env_deffunction(topenv, name, va, ret, args);
                   rett =  clike_env_unitype(env, ret);
                   cbody = clike_compile_code(toploop,env,body,
                                                rett,
                                                clike_c_type(env,rett));
                   clike_env_savebody(topenv, name, body, cbody);
-                  cc1 = if(cc) ['stdcall'] else [];
+                  cc1 = {match cc with
+                            ['llvm'()] -> []
+                           | else -> cc};
                   ['comment'('clike'('xfunc'(ret,name,va,@args)));
                    'function'(cc1, name, clike_c_type(env,rett), va,
                                  map [tp;'v'(nm)] in args do {

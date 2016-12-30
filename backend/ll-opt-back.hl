@@ -104,7 +104,7 @@ function genssa2_to_ll(src0, src, types) {
   newbody = dobody();
   return visit:ir2(irtoplevel: src0) {
     once irtoplevel {
-      %function -> mk:node(body = newbody, annotations = [])
+      %function -> mk:node(body = newbody)
     | else -> node}}}}
 
 

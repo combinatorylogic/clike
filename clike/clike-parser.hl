@@ -100,6 +100,7 @@ parser pfclike ( pfront ) {
 /// \commentbox{Some calling conventions attributes, but we're not going to support the whole list here.}\\
   clcallconv := {"__stdcall" => stdcall()}
               / {"__llvm" => llvm()}
+              / {"__hls" => hls()}
 	      ;
 
   ///\commentbox{A function type parser}\\
