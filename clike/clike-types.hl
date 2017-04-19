@@ -8,10 +8,22 @@
 function clike_types_inner (env, c, toploop, rettype)
 {
    vars = mkhash();
-   do loop(c0 = c)
+   do loop(c0 = c) {
     visit:clike(llcode: c0)
     {
-       once lltype { else -> node}; // do not type constexprs there
+       deep lltype {
+          typedmacro -> {
+              macroenv = mkref([]);
+              rule = clike_env_gettypingrules(env, nm);
+              rtype = if(rule) rule(env, args, macroenv) else [];
+              expander = clike_env_gettypedexpander(env, nm);
+              ncode_0 = expander(env, rtype, args, macroenv);
+                  // args are going to be stripped from types
+                  // during this expansion
+              ncode = loop('passtype'(ncode_0)); // redo the propagation
+              return ncode
+           }
+        | else -> node}; // do not type constexprs there
        deep llvarname {
            v -> name
         |  p -> ccerror('CLIKE:WRONG-PASS'(node))
@@ -104,6 +116,7 @@ function clike_types_inner (env, c, toploop, rettype)
          | toplift -> {toploop(env, t); 'begin'()}
          | set -> clike_fix_settype('set',LOC,l,e)
          | passexpr -> return e
+         | passtype -> return e
          | if2 -> mk:node(e=clike_fix_bool(e))
          | if3 -> mk:node(e=clike_fix_bool(e))
          | for -> mk:node(cnd=clike_fix_bool(cnd))
@@ -129,7 +142,7 @@ function clike_types_inner (env, c, toploop, rettype)
         |  getelt -> clike_make_ref_type(clike_fieldtype(car(e),fldnm)):node
         |  else -> ccerror('CLIKE:WRONG-PASS'(node))
        };
-    }
+    }}
 }
 }
 
@@ -158,15 +171,16 @@ function clike_types (env, c, toploop, rettype)
 
 \pfcode{
 ///\commentbox{Convert clike2 back into clike}\\
-function clike_untype_llcode(c)
+function clike_untype_llcode(c) {
   visit:clike2(llcode:c)
     { deep llcode {
          passexpr -> e
        | passlvalue -> e
+       | passtype -> e
        | else -> node
       };
       deep llexpr : e; deep lvalue : e;}
-}
+}}
 
 
 \pfcode{

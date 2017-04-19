@@ -100,6 +100,7 @@ function genssa2_to_ll(src0, src, types) {
          br -> 'br_label'(dst)
        | brc -> 'br'(c, tr, fl)
        | switch -> 'switch'(v, d, ns)
+       | indirect -> car(orig) // TODO: verify the names of the targets
        | none -> 'unreacheable'()}};
   newbody = dobody();
   return visit:ir2(irtoplevel: src0) {

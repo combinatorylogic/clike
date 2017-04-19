@@ -33,6 +33,7 @@ function clike_expand_macros_expr(env, tl)
        macroapp -> clike_apply_macro(env, nm, args, clike_expand_macros_expr)
      | else -> node
     };
+    once lltype : forall clike_expand_macros_type(env, node);
     once llcode : forall clike_expand_macros_code(env, node);
    }
 
@@ -43,6 +44,7 @@ function clike_expand_macros_code(env, tl)
        macroapp -> clike_apply_macro(env, nm, args, clike_expand_macros_code)
      | else -> node
     };
+    once lltype : forall clike_expand_macros_type(env, node);
     once llexpr : forall clike_expand_macros_expr(env, node);
    }
 
@@ -53,6 +55,18 @@ function clike_expand_macros_top(env, tl)
        macroapp -> clike_apply_macro(env, nm, args, clike_expand_macros_top)
      | else -> node
     };
+    once lltype : forall clike_expand_macros_type(env, node);
+    once llcode : forall clike_expand_macros_code(env, node);
+   }
+
+///\commentbox{A user--defined macros expansion pass. Should be performed right after the core macros expansion pass (which means that user-defined macros should not construct core macros).}\\
+function clike_expand_macros_type(env, tp)
+   visit:clike(lltype: tp) {
+    deep lltype {
+       macroapp -> clike_apply_macro(env, nm, args, clike_expand_macros_top)
+     | else -> node
+    };
+    once llexpr : forall clike_expand_macros_expr(env, node);
     once llcode : forall clike_expand_macros_code(env, node);
    }
 

@@ -79,6 +79,7 @@ function ll_to_genssa2(src) {
      | br -> [[]; 'brc'(cnd, tr, fl)]
      | br_label -> [[]; 'br'(nm)]
      | switch -> [[]; 'switch'(value, els, @cases)]
+     | indirectbr_jt -> [[]; 'indirect'([node],@ds)]
      | else -> ccerror('UNSUPPORTED')
      };
      deep irswitchdst: {[value; dst]};

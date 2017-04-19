@@ -16,6 +16,7 @@ ast genssa2 {
   term = br(labident:dst)
        | brc(expr:c, labident:tr, labident:fl)
        | switch(expr:v, labident:d, .*switchdst:ns)
+       | indirect(*any:orig, .*labident:dsts)
        | none()
        ;
   expr = var(varident:id)

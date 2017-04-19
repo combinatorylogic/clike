@@ -1,20 +1,29 @@
-
-\documentclass{article}
-\usepackage[utf8]{inputenc}
-%\usepackage[T1]{fontenc}
-%\usepackage{textcomp}
-
-\usepackage{calc}
-\usepackage{ifthen}
-\usepackage{tikz}
-\usepackage{hyperref}
-\usetikzlibrary{backgrounds,fit,decorations.pathreplacing}  % TikZ libraries
-
-
-\usepackage{graphicx}
-
+\documentclass[10pt,a4paper]{article}
+\usepackage[top=30pt,bottom=40pt,left=48pt,right=46pt]{geometry}
 \usepackage{alltt}
+\usepackage{ifthen}
+\usepackage{calc}
 \usepackage{rotating}
+\usepackage[usenames]{color}
+\usepackage{multicol}
+\usepackage[framemethod=tikz]{mdframed}
+\usepackage{hyperref}
+\usepackage{graphicx}
+ 
+\usetikzlibrary{backgrounds,fit,decorations.pathreplacing} 
+
+\definecolor{purple}{rgb}{0.5,0,0.5}
+\global\mdfdefinestyle{codeblock}{%
+    outerlinewidth=2pt,innerlinewidth=0pt,
+    outerlinecolor=gray,roundcorner=3pt
+}
+
+\global\mdfdefinestyle{demoblock}{%
+    outerlinewidth=0.5pt,innerlinewidth=0pt,
+    outerlinecolor=blue,roundcorner=0pt
+}
+
+
 
 \newcommand{\colobox}[1]{
 \begin{tikzpicture}
@@ -33,7 +42,7 @@
 };
 \end{tikzpicture}\\}
 
-\newcommand{\commentbox}[1]{\colobox{#1}}
+\newcommand{\commentbox}[1]{\colobox{\sl #1}}
 
 \newcommand{\lspspc}{{\color{white}{\tt{\_}}}}
 \newcommand{\lsplp}{(}
@@ -43,20 +52,21 @@
 \newcommand{\docentry}[1]{\sl #1}
 
 \newenvironment{pfcodeblock}[1]{}{}
-\newcommand{\pfcodeblockbegin}{\vskip 3pt}
-\newcommand{\pfcodeblockend}{}
+\newcommand{\pfcodeblockbegin}{\begingroup\setlength{\parindent}{0cm}\vskip1mm\begin{mdframed}[style=codeblock]}
+\newcommand{\pfcodeblockend}{\end{mdframed}\vskip1mm\endgroup}
+
+\newenvironment{pficodeblock}[1]{}{}
+\newcommand{\pficodeblockbegin}{\begingroup}
+\newcommand{\pficodeblockend}{\endgroup}
+
+\newcommand{\pfdemoblockbegin}{\begin{minipage}[t]{0.8\linewidth}\begingroup\fontsize{8}{8}\selectfont\setlength{\parindent}{0cm}\vskip1mm\begin{mdframed}[style=demoblock]}
+\newcommand{\pfdemoblockend}{\end{mdframed}\vskip1mm\endgroup\end{minipage}}
 
 
-\definecolor{light-gray}{gray}{0.5}  
+\definecolor{light-gray}{gray}{0.5}
 
-\title{CLike Compiler}
-\author{Meta Alternative Ltd.}
-\date{2008-2011}
 
 \begin{document}
-\setlength{\parindent}{0pt} 
-
-\maketitle
 
 \tableofcontents
 

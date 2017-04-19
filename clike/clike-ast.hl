@@ -81,6 +81,7 @@ ast clike {
 
      // A temporary node for clike2 translation only, should never be generated
      | passexpr(llexpr:e)
+     | passtype(lltype:e)
      | passlvalue(lvalue:e)
 
      // Should not appear after macro expansions
@@ -150,6 +151,7 @@ ast clike {
      | array(lvalue:ar, .*llexpr:idxs)
      | deref(llexpr:e)
      | getelt(lvalue:e, ident:fldnm)
+     | macroapp(ident:nm, .*llmacroarg:args)
      ;
 
    llconst =
@@ -194,6 +196,8 @@ ast clike {
 
      // Invalid after macro expansion
      | macrostruct(*ident:nm, .*llmacrostrelt:ts)
+     | macroapp(ident:nm, .*llmacroarg:args)
+     | typedmacro(ident:nm, .*lltmacroarg:args)
 
      // Intermediate, used for transforms
      | null()
@@ -201,7 +205,7 @@ ast clike {
      | arg(lltype:t)
      | nop()
      ;
-   llconstexpr is (.llexpr:e);
+   llconstexpr is (.any:e);
 }
 }
 

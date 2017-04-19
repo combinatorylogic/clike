@@ -2,8 +2,6 @@
 
  CLike 0.1 is a low-level programming language with an extensible syntax based on C. It is supposed to be used as both a front-end and a target for MBase/PFront, and can be embedded as a JIT engine into .net applications.
 
- CLike and llvm-wrapper are distributed under the terms of the Q Public License version 1.0 with a change to choice of law (see license.txt).
-
  CLike targets LLVM, tested with LLVM 3.5. Since the old JIT was replaced with MCJIT it is no longer capable of adding new declarations to the module after a function from that module was executed. Some multi-module solution is possible but not implemented yet.
 
  LLVM bindings for MBase are included, see llvm-wrapper/*
