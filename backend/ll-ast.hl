@@ -10,7 +10,7 @@ ast ir2 {
    irmodule is (.*irtoplevel:tls);
 
    irtoplevel = 
-      %function(ircallconv:cc, ident:name, irtype:ret, bool:va, *irarg:args, ircode:body, any:annotations)
+      %function(*ircallconv:cc, ident:name, irtype:ret, bool:va, *irarg:args, ircode:body, any:annotations)
     | eglobal(ident:name, irtype:type)
     | global(ident:name, irtype:type, irval:v) // v = const only!
     | comment(anything:x)

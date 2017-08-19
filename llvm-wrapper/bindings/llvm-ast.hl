@@ -11,7 +11,7 @@ ast llvm_ir {
   irstructel is (irtype:t, irval:v);
 
    irtoplevel = 
-      %function(ircallconv:cc, ident:name, irtype:ret, bool:va, *irarg:args, *irbblock:body, .*any:annotations)
+      %function(*ircallconv:cc, ident:name, irtype:ret, bool:va, *irarg:args, *irbblock:body, .*any:annotations)
     | eglobal(ident:name, irtype:type)
     | global(ident:name, irtype:type, irval:v) // v = const only!
     | comment(anything:x)

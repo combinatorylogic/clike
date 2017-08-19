@@ -13,3 +13,7 @@ function %peg-function-cdr(l) cdr(l)
 
 #(macro peg-function-region ()
    `(__peg:get-delta saved (__peg:get-position_ source)))
+
+
+#(function peg-function-sm (a b)
+   (Sm<< "_" a b))

@@ -14,9 +14,19 @@ function ll_isconst(v)
      | else -> true}}}
 
 \pfcode{
+parser genssa2_fun_intrinsic () {
+   genssa2_fun_intrinsic := "_pragma_" (.*) => intrinsic();
+}}
+
+\pfcode{
 function ll_to_genssa2(src) {
   mktype(t) = 'const'('ir2type'(), t);
   mkterm(dst, t) = [[%Sm<<(dst, "___TERM");t]];
+  is_intrinsic(dst) = {
+     ret = parse %S<<(dst) as genssa2_fun_intrinsic;
+     match ret with
+       'intrinsic'() -> true
+     | else -> []};
   visit:ir2(irtoplevel: src) {
      deep irtoplevel {
         %function -> 'f'(name, ret, args, body)
@@ -67,7 +77,9 @@ function ll_to_genssa2(src) {
       | fcmp -> 'call'([], %Sm<<('ir2-fcmp:', vcond), lhs, rhs)
       | select ->
                 'select'(vif, vthen, velse)
-      | call -> 'call'(['external'()], 'ir2-call', 'other'('globfun'(), fn),@args)
+      | call -> if (is_intrinsic(fn))
+                   'call'(['intrinsic'()], fn, @args)
+                else 'call'(['external'()], 'ir2-call', 'other'('globfun'(), fn),@args)
       | callptr -> 'call'([], 'ir2-callptr', fn, @args)
       | callptrstd -> 'call'([], 'ir2-callptrstd', fn, @args)
       | ptr -> 'call'([], 'ir2-ptr', src, mktype(dst))

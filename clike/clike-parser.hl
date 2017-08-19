@@ -101,15 +101,16 @@ parser pfclike ( pfront ) {
   clcallconv := {"__stdcall" => stdcall()}
               / {"__llvm" => llvm()}
               / {"__hls" => hls()}
+              / {"__nowrap" => nowrap()}
 	      ;
 
   ///\commentbox{A function type parser}\\
-  clfuncsignature := [clcallconv]:cc? [cltype]:t [clqident]:name "(" 
+  clfuncsignature := eslist<[clcallconv]>:cc [cltype]:t [clqident]:name "(" 
                          ecslist<[clsigarg],",">:args
                          [clfuncsigva]:va ")" => 
                      $cdr(f(cc,t,name,va,args));
 
-  clcleanfuncsignature := [clcallconv]:cc?  [cltype]:t [clqident]:name "("
+  clcleanfuncsignature := eslist<[clcallconv]>:cc [cltype]:t [clqident]:name "("
                          ecslist<[cltype1],",">:args [clfuncsigva]:va
                          ")" => {mode=top} efunc($source(), cc,t,name,va,args);
 
@@ -170,6 +171,8 @@ parser pfclike ( pfront ) {
             { "::type" "\" [clident]:i "\" => {qstate = unquote} unquote(i) }
          /  { "\" [clident]:i "\" => {qstate = unquote} unquote(i) }
          /  [cltype_start]
+         /  { "int." [number]:n => integer($sm(`sb,n)) } 
+         /  { "uint." [number]:n => integer($sm(`ub,n)) } 
          /  { int32 => integer(`i32) }
          /  { int8  => integer(`i8)  }
          /  { int16  => integer(`i16)  }
@@ -374,6 +377,8 @@ parser pfclike ( pfront ) {
 
             /   { "(" [cllvalue]:fn ")" "(" ecslist<[clexpr0],",">:args ")"
                     => {mode=expr} callptr($source(), fn,@args) }
+            /   { "::pragma" [clqident]:fn "(" ecslist<[clexpr0],",">:args ")" =>
+                       {mode=expr} intrinsic($sm(`pragma_ , fn),@args) }
             /   [clprimexpratom_inner]
             /   [clatomexpr]
             ;

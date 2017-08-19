@@ -9,9 +9,9 @@
 \pfcode{
 ast clike {
    lltoplev =
-       cfunc(pos:LOC, llcallconv:cc, lltype:ret, topident:name, bool:va, 
+       cfunc(pos:LOC, *llcallconv:cc, lltype:ret, topident:name, bool:va, 
               *llfuncarg:args, llcode:body, .*any:annotations)
-     | efunc(pos:LOC, llcallconv:cc, lltype:ret, topident:name, bool:va,
+     | efunc(pos:LOC, *llcallconv:cc, lltype:ret, topident:name, bool:va,
               *llfuncarg:args, .*any:annotations)
      | typedef(pos:LOC, lltype:tp, topident:name)
      | global(pos:LOC, lltype:tp, llvarname:name, .*llconst:init)
@@ -98,6 +98,8 @@ ast clike {
        
    llexpr =
        inblock(pos:LOC, llcode:c, llexpr:r)
+       
+     | intrinsic(ident:fn, .*llexpr:args)
      | call(pos:LOC, ident:id, .*llexpr:args)
      | callptr(pos:LOC, lvalue:fn, .*llexpr:args)
      | stdcallpfx(llexpr:e)
@@ -270,6 +272,9 @@ ast clike3 {
    | fcmp(irfcond:vcond, llexpr2:lhs, llexpr2:rhs)
    | phi(irtype:t, .*irphi:dsts)
    | select(llexpr2:vif, llexpr2:vthen, llexpr2:velse)
+
+   | intrinsic(ident:fn, .*llexpr2:args)
+
    | call(ident:fn, .*llexpr2:args)
    | callptr(llexpr2:fn, .*llexpr2:args)
    | callptrstd(llexpr2:fn, .*llexpr2:args)

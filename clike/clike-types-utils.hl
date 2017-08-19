@@ -52,12 +52,34 @@ function clike_type_iso(a, b)
         if(and(s1,s2)) %eqv?(s1,s2) else iso(x,y)
       }}
 
+
+parser clike_inttype_parser (pfront) {
+   clike_inttype_parser := { "_sb" [number]:n => sb(n) }
+                        /  { "_ub" [number]:n => ub(n) }
+                        /  { "i" [number]:n => i(n) }
+                        /  { "u" [number]:n => u(n) }
+                        ;
+}
+
+function clike_parse_inttype(itype)
+{  tmp = parse %S<<(itype) as clike_inttype_parser;
+   match tmp with
+      'sb'(n) -> tmp
+    | 'ub'(n) -> tmp
+    | 'i'(n) -> tmp
+    | 'u'(n) -> tmp
+    | else -> []}
+
 // Check if an integer is of a signed kind
 function clike_signed_int(itype)
   case itype {
      'i8'|'i16'|'i32'|'i64' -> true
    | 'u8'|'u16'|'u32'|'u64' -> nil
-   | else -> ccerror('CLIKE:INCORRECT-INTEGER-SPEC'(itype))
+   | else ->
+      (match clike_parse_inttype(itype) with
+          'sb'(n) -> true
+        | 'ub'(n) -> []
+        | else -> ccerror('CLIKE:INCORRECT-INTEGER-SPEC'(itype)))
   }
 
 // Check if a type is signed, if this notion applies
@@ -177,6 +199,11 @@ function clike_rank(i)
  case i {
    'i8' -> 1 | 'u8' -> 2 | 'i16' -> 3 | 'u16' -> 4 
   | 'i32' -> 5 | 'u32' -> 6 | 'i64' -> 7 | 'u64' -> 8
+  | else -> {
+       aif(rnk = clike_parse_inttype(i)) {
+          cadr(rnk) + 100
+       } else 0
+    }
  }
 
 // Calculate the binary operation type, inject implicit casts if needed

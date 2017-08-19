@@ -116,7 +116,7 @@ function clike_convop_llvm(tto, tfrom)
     match tfrom:tto with
        integer(i1):integer(i2) -> {
           if(i1 === i2) [] else
-          { cparses(s) = %S->N(%list->string(cdr(%symbol->list(s))));
+          { cparses(s) = aif(chk = clike_parse_inttype(s)) cadr(chk) else 1;
             n1 = cparses(i1);n2=cparses(i2);
             if(n1>n2) 'Trunc' else 'ZExt' // TODO: do something with signs
           }}
@@ -375,6 +375,7 @@ function clike_precompile(env, c)
      };
      deep lloexpr {
         call -> 'call'(id,@args)
+      | intrinsic -> 'call'(fn,@args)        
       | callptr -> 'callptr'(fn,@args)
       | stdcallpfx -> {match cdr(e) with
                           'callptr'(fn,@args) -> 'callptrstd'(fn,@args)

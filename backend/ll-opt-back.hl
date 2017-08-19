@@ -15,6 +15,12 @@ function genssa2_to_ll_parse_intrinsic(dst) {
      pair(l,r) -> l:r
    | e -> e:[]}}
 
+\pfcode{
+function ll_strip_annotations(l) {
+   map append l do
+     match l with
+       'loops'(@_) -> []
+     | else -> [l]}}
 
 \pfcode{
 %"Reverse transform from genssa2 back to ir2"
@@ -73,6 +79,7 @@ function genssa2_to_ll(src0, src, types) {
        iter o in ops do {
          match o with
             [nm;TERM(t)] -> radd(t)
+          | [nm;[]] -> []
           | else -> ladd(o)};
        r0 = rget();
        r = if(r0) car(r0) else [];
@@ -90,7 +97,12 @@ function genssa2_to_ll(src0, src, types) {
        deep iop(dstreg) {
          phi -> 'phi'(gettype(dstreg), @args)
        | select -> 'select'(cnd, t, f)
-       | call -> docall(dst, a, args)};
+       | call -> {
+           if (filter a as match a with 'intrinsic'() -> true) {
+             return {
+               'call'(dst, @args)
+             }
+           } else docall(dst, a, args)}};
        deep expr {
          var -> 'var'(id)
        | glob -> 'global'(id)
@@ -105,9 +117,27 @@ function genssa2_to_ll(src0, src, types) {
   newbody = dobody();
   return visit:ir2(irtoplevel: src0) {
     once irtoplevel {
-      %function -> mk:node(body = newbody)
+      %function -> {
+         // TODO: strip only the loop annotations
+         mk:node(body = newbody, annotations = ll_strip_annotations(annotations))}
     | else -> node}}}}
 
 
+\pfcode{
+function ll_clean_pragmas(iadd, top) {
+   is_intrinsic(dst) = {
+     ret = parse %S<<(dst) as genssa2_fun_intrinsic;
+     match ret with
+       'intrinsic'() -> true
+     | else -> []};
+   visit:ir2 (irtoplevel: top) {
+      deep irbblock {
+        bblock -> mk:node(c = map append c in c do c(name))};
+      deep irpair: fun(bbname) e(nm, bbname);
+      deep irexpr (dstnm, bbname) {
+         call -> 
+            if (is_intrinsic(fn)) {iadd([bbname; dstnm; node]); return []}
+            else [[dstnm; node]]
+       | else -> [[dstnm; node]]}}}}
 
 %%%%%%%%%%%%%%%%%%%%

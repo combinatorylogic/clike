@@ -9,6 +9,8 @@
 
 \pfcode{
 function ll_genssa_opt(globenv, src) {
+   /* ohashput(ll_env, '*debug-compiler-ssa*', 1);
+      ohashput(ll_env, '*debug-compiler-ssa-timing*', 1); */
    g2 = ll_to_genssa2(src);
   <g3ht:g3> = genssa2_process(ll_env, globenv, g2);
    g4 = genssa2_to_ll(src, g3, g3ht);

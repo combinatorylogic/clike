@@ -34,6 +34,9 @@ function clike_types_inner (env, c, toploop, rettype)
                <tp:va:atps> = clike_env_funcretargtypes(env, nid);
                return tp : clike_fix_funcall('call', LOC, nid, va, args, atps);
            }
+         | intrinsic -> {
+               return 'void'() : node
+           }
          | callptr -> {
                <tp:va:atps> = clike_funcptrtype(car(fn));
                return tp : clike_fix_funcall('callptr', LOC, fn, va, args, atps);

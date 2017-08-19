@@ -35,7 +35,7 @@ function shlf(a, b)  notnet(int a, int b) {leave a<<b;}
 }
 
 \pfcode{
-define ll_env = {
+function ll_mk_env(passes) {
   ht =  mkhash();
   untype(t) = {
      match t with
@@ -158,8 +158,15 @@ define ll_env = {
       ['ir2-binop:FSub';1;1;mkbinfun( %f- )];
       ['ir2-binop:FMul';1;1;mkbinfun( %f* )];
 
-      
+      ['ir2-convop:ZExt';1;1; fun(args) {
+          tp = untype(caddr(cadr(args)));
+          mkconst(tp, getval(car(args)))}];
 
+      ['ir2-convop:SExt';1;1; fun(args) {
+          tp = untype(caddr(cadr(args)));
+          mkconst(tp, getval(car(args)))}];
+
+      ['ir2-convop:BitCast';[];1;[]];
 
       ['ir2-icmp:NE';1;1;mkboolfun( fun(l,r) l!=r );'neq'];
       ['ir2-icmp:EQ';1;1;mkboolfun( fun(l,r) l==r );'eq'];
@@ -186,9 +193,13 @@ define ll_env = {
   ohashput(ht, '*get-integer-constant*', fun(tp, vl) {
       match vl with integer(x,@_) -> x | else -> []});
 
+  if(passes) ohashput(ht, '*userpasses*', passes);
+
   return ht};
+}
 
-
+\pfcode{
+define ll_env = ll_mk_env([])
 }
 
 
