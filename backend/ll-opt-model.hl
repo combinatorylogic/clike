@@ -162,6 +162,10 @@ function ll_mk_env(passes) {
           tp = untype(caddr(cadr(args)));
           mkconst(tp, getval(car(args)))}];
 
+      ['ir2-convop:Trunc';1;1; fun(args) {
+          tp = untype(caddr(cadr(args)));
+          mkconst(tp, getval(car(args)))}];
+
       ['ir2-convop:SExt';1;1; fun(args) {
           tp = untype(caddr(cadr(args)));
           mkconst(tp, getval(car(args)))}];

@@ -378,7 +378,7 @@ parser pfclike ( pfront ) {
             /   { "(" [cllvalue]:fn ")" "(" ecslist<[clexpr0],",">:args ")"
                     => {mode=expr} callptr($source(), fn,@args) }
             /   { "::pragma" [clqident]:fn "(" ecslist<[clexpr0],",">:args ")" =>
-                       {mode=expr} intrinsic($sm(`pragma_ , fn),@args) }
+                       {mode=expr} intrinsic($smm(`pragma_ , fn),@args) }
             /   [clprimexpratom_inner]
             /   [clatomexpr]
             ;

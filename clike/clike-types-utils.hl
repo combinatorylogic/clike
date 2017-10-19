@@ -54,8 +54,8 @@ function clike_type_iso(a, b)
 
 
 parser clike_inttype_parser (pfront) {
-   clike_inttype_parser := { "_sb" [number]:n => sb(n) }
-                        /  { "_ub" [number]:n => ub(n) }
+   clike_inttype_parser := { "sb" [number]:n => sb(n) }
+                        /  { "ub" [number]:n => ub(n) }
                         /  { "i" [number]:n => i(n) }
                         /  { "u" [number]:n => u(n) }
                         ;

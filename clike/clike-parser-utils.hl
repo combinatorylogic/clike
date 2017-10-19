@@ -16,4 +16,8 @@ function %peg-function-cdr(l) cdr(l)
 
 
 #(function peg-function-sm (a b)
+   (Sm<< a b))
+
+
+#(function peg-function-smm (a b)
    (Sm<< "_" a b))
