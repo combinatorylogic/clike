@@ -44,27 +44,27 @@ void test(int a, float b) {
 
 ## Clike code layout
 
-File                   | Description
----------------------- | ------------------------------------------------
-                       |
-clike.hl               | Binds the core functionality together
-clike-standalone.hl    | A version that does not need LLVM bindings
-clike-ast.hl           | Internal CLike AST definitions
-clike-env.hl           | Compiler environment support
-clike-types-utils.hl   |
-clike-types.hl         | Types propagation pass + typed macro expansion
-clike-compiler.hl      | Function bodies compilation passes
-clike-expand.hl        | Post-parsing expansion and a simple macro expander
-clike-compiler-top.hl  | Top level expressions compiler and all compiler passes
-                       |
-clike-parser.hl        | A standard parser for CLike
-clike-utils.hl         | Additional utilities, not used directly by a compiler
-clike-api.hl           | .NET api to CLike functionality
-                       |
-clike-lib.hl           | To build CLikeCore.dll
-clike-llvm.hl          | All the LLVM-depending functionality
-                       |
-clike-cc.hl            | A simple command-line compiler
-clike-cc-standalone.hl | A simple command-line compiler, no-LLVM version
+| File                   | Description
+| ---------------------- | ------------------------------------------------
+|                        |
+| clike.hl               | Binds the core functionality together
+| clike-standalone.hl    | A version that does not need LLVM bindings
+| clike-ast.hl           | Internal CLike AST definitions
+| clike-env.hl           | Compiler environment support
+| clike-types-utils.hl   |
+| clike-types.hl         | Types propagation pass + typed macro expansion
+| clike-compiler.hl      | Function bodies compilation passes
+| clike-expand.hl        | Post-parsing expansion and a simple macro expander
+| clike-compiler-top.hl  | Top level expressions compiler and all compiler passes
+|                        |
+| clike-parser.hl        | A standard parser for CLike
+| clike-utils.hl         | Additional utilities, not used directly by a compiler
+| clike-api.hl           | .NET api to CLike functionality
+|                        |
+| clike-lib.hl           | To build CLikeCore.dll
+| clike-llvm.hl          | All the LLVM-depending functionality
+|                        |
+| clike-cc.hl            | A simple command-line compiler
+| clike-cc-standalone.hl | A simple command-line compiler, no-LLVM version
 
 
