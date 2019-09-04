@@ -110,6 +110,7 @@ ast clike {
 
      | un(ident:op, llexpr:e)
      | typecast(lltype:t, llexpr:e)
+     | bitcast(lltype:t, llexpr:e)
      | pre(ident:op, lvalue:v, .*lltype:vtyp)
      | post(ident:op, lvalue:v, .*lltype:vtyp)
 
@@ -262,7 +263,7 @@ ast clike3 {
    | shufflevector(int:n1, llexpr2:val1, int:n1, llexpr2:val2, llexpr2:mask)
    | extractvalue(iraggtype:t, llexpr2:v, llexpr2:idx)
    | insertvalue(llexpr2:v, irtype:tv, llexpr2:elt, llexpr2:idx)
-   | alloca(irtype:t)
+   | alloca(irtype:t,.*ident:varname)
    | load(llexpr2:ptr)
    | loadvar(ident:id) // shortcut
    | getelementptr(llexpr2:ptr, . *llexpr2:idxs)

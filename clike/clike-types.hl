@@ -51,6 +51,10 @@ function clike_types_inner (env, c, toploop, rettype)
              t1 = clike_env_unitype(env, t);
              clike_castto(t1, e)
            }
+         | bitcast -> {
+             t1 = clike_env_unitype(env, t);
+             t1 : mk:node(t = t1)
+           }
          | pre -> car(v) : mk:node(vtyp = [car(v)])
          | post -> car(v) : mk:node(vtyp = [car(v)])
          | inblock -> car(r) : node

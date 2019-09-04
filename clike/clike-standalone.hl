@@ -21,20 +21,21 @@ include "../backend/alt.hl"
 function llvm_emit(mdl, code) []
 
 function llvm_init_module(nm) collector(add, get) {
-   return [add;get;nm]
+   return [add;get;nm;fun() []]
 }
 
 function llvm_save(mdl, name) {
-  <[add;get;nm]> = mdl;
+  <[add;get;nm;prev]> = mdl;
    c = get();
-   return ir2backend(c, nm)
+   return ir2backend(c, nm, prev())
 }
 
 define llvm_no_engine = mkref([])
 define %llvm-optimise = mkref([])
 
 function clike_ir_post(mdl, llcode) {
-  <[add;get;nm]> = mdl; iter c in llcode do add(c)
+  <[add;get;nm;prev]> = mdl;
+  iter c in llcode do add(c)
 }
 
 -------------------------------------
@@ -43,6 +44,8 @@ define clike_no_llvm = mkref(true);
 define clike_outfile_v = mkref([]);
 define clike_debug_level = mkref(0);
 define clike_default_mcenv = mkhash();
+define clike_alt_backend = mkref([]);
+define clike_alt_backend_hook = mkref([]);
 
 
 include "./clike.hl";

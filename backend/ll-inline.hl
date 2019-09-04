@@ -131,12 +131,13 @@ function ir2_inline_function_body(dstdef, entry, retdst, nxt, callargs) {
      return pass5}}}
 
 \pfcode{
-function ir2_inline_function(fns, pred, fnc)
+function ir2_inline_function(fns, prevfns, pred, fnc)
   visit:ir2(irtoplevel: fnc) {
      deep irpair: e(nm);
      deep irexpr {
         call -> fun(retdst) {
-           dstdef = ohashget(fns, fn);
+           dstdef0 = ohashget(fns, fn);
+           dstdef = if (pred(dstdef0)) dstdef0 else ohashget(prevfns, fn);
            if (pred(dstdef)) symbols(entry, nxt) { // inline it
               [[];'splitbb'(entry, nxt, 
                     ir2_inline_function_body(dstdef, entry, retdst, nxt, args))]
@@ -148,16 +149,18 @@ function ir2_inline_function(fns, pred, fnc)
 }
 
 \pfcode{
-function ir2_inline(pred, mdl) 
+function ir2_inline(pred, mdl, metamdl) 
+collect ir2 (irmodule: metamdl) with
+     prevfns from irtoplevel. %function . name {
 collect ir2 (irmodule: mdl) with
      fns from irtoplevel. %function . name {
   visit:ir2(irmodule: mdl) {
     deep irtoplevel {
        %function -> if (body)
                         ir2split_flatten(
-                            ir2_inline_function(fns, pred, node))
+                            ir2_inline_function(fns, prevfns, pred, node))
                       else node
-    |  else -> node}}}}
+    |  else -> node}}}}}
 
 
 %%%%%%%%%

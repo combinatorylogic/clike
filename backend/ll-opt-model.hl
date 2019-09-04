@@ -41,6 +41,14 @@ function ll_mk_env(passes) {
      match t with
         'ir2_type'(x) -> x
       | else -> t};
+  getzero(tp) = {
+    visit:ir2(irtype:tp) {
+      once irtype {
+        integer -> 0
+      | float -> %flt:parse("0.0")
+      | pointer -> 0
+      | else -> 0
+      }}};
   getir2constval(c) =
      visit:ir2(irval:c) { once irval {
         false -> 0
@@ -48,7 +56,7 @@ function ll_mk_env(passes) {
       | null -> []
       | integer -> v
       | float -> %flt:parse(%S<<(v))
-      | zero -> 0 // TODO
+      | zero -> getzero(cadr(t))
       | else -> {'unknown'(c)}
      }};
   getir2consttype(c) =
@@ -166,9 +174,23 @@ function ll_mk_env(passes) {
           tp = untype(caddr(cadr(args)));
           mkconst(tp, getval(car(args)))}];
 
+      ['ir2-convop:FPTrunc';1;1; fun(args) {
+          tp = untype(caddr(cadr(args)));
+          mkconst(tp, %S<<(getval(car(args))))
+        }];
+
+/*
+      ['ir2-convop:SIToFP';1;1; fun(args) {
+          tp = untype(caddr(cadr(args)));
+          ret=mkconst(tp, getval(car(args)));
+          ret
+       }]; */
+
       ['ir2-convop:SExt';1;1; fun(args) {
           tp = untype(caddr(cadr(args)));
-          mkconst(tp, getval(car(args)))}];
+          ret=mkconst(tp, getval(car(args)));
+          ret
+          }];
 
       ['ir2-convop:BitCast';[];1;[]];
 

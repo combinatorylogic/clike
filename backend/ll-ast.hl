@@ -90,7 +90,7 @@ ast ir2 {
    | shufflevector(int:n1, irval:val1, int:n2, irval:val2, irval:mask)
    | extractvalue(iraggtype:t, irval:v, irval:idx)
    | insertvalue(irval:v, irtype:tv, irval:elt, irval:idx)
-   | alloca(irtype:t)
+   | alloca(irtype:t,.*ident:varname)
    | load(irval:ptr)
    | getelementptr(irval:ptr, *irval:idxs, .*irtype:ptrtp)
    | getelementptr_inbounds(irval:ptr, *irval:idxs, .*irtype:ptrtp)

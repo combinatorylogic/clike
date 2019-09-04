@@ -136,13 +136,17 @@ function clike_convop_llvm(tto, tfrom)
 
 \pfcode{
 ///\commentbox{Compile an unary operation into LLVM}\\
-function clike_c_unop(env, op, e)
+function clike_c_unop(env, op, e) {
  case op {
-    'minus' -> 
-       'binary'('Sub',car(e):'val'('zero'(clike_c_type(env, car(e)))),e)
+    'minus' ->  {
+       tp = clike_c_type(env, car(e));
+       op = (match tp with  integer(@_) -> 'Sub'
+                          | float(@_) -> 'FSub'
+                          | else -> ccerror('CLIKE:UNARY-MINUS'(tp)));
+       'binary'(op,car(e):'val'('zero'(tp)),e)}
   | 'not' -> 'icmp'('EQ',e,car(e):'val'('zero'(clike_c_type(env, car(e)))))
  }
-}
+}}
 
 \pfcode{
 ///\commentbox{Compiles a binary opeartion into LLVM}\\
@@ -266,10 +270,10 @@ function clike_precompile(env, c)
             match tp with
                array(eltt,@_) -> { // perform a decay immediately
                 ntp = 'ptr'(eltt);
-                name0 = gensym(); name1=gensym();
+                name0 = %Sm<<(name, "_arr_", gensym());
                 'begin'(
                   'set'(name0, clike_make_ref_type(tp) :
-                                   'alloca'(clike_ca_type(env, tp))),
+                                   'alloca'(clike_ca_type(env, tp), name)),
                   'set'(name, clike_make_ref_type(ntp) :
                                    'alloca'(clike_c_type(env, ntp))),
                   'store'('val'('var'(name)), clike_make_ref_type(ntp) :
@@ -400,6 +404,9 @@ function clike_precompile(env, c)
                         'convop'(cvop, e, 
                                   clike_c_type(env, t))
                      else cdr(e) }
+      | bitcast -> { // This is not an LLVM-compatible op at the moment
+            'convop'('BitCast', e, clike_c_type(env, t))
+        }
       | pre -> symbols(tmp) {
           tp = if(vtyp) clike_deref_type(car(vtyp)) else '_';
           match cdr(v) with

@@ -374,6 +374,7 @@ parser pfclike ( pfront ) {
             /   { [clqident]:fn "(" ecslist<[clexpr0],",">:args ")" =>
                     {mode=expr} call($source(), fn,@args) }
             /   { "(" [cltype]:t ")" [clexpr0]:e => typecast(t,e) }
+            /   { "(" "bitcast" ":" [cltype]:t ")" [clexpr0]:e => bitcast(t,e) }
 
             /   { "(" [cllvalue]:fn ")" "(" ecslist<[clexpr0],",">:args ")"
                     => {mode=expr} callptr($source(), fn,@args) }

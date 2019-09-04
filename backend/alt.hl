@@ -7,8 +7,8 @@ include "./backend.hl"
 
 define ir2backend_hook = mkref([])
 
-function ir2backend(mdl, fnm)
+function ir2backend(mdl, fnm, oldmdl)
 {
  h = deref(ir2backend_hook);
- if(h) h(mdl,fnm) else mdl
+ if(h) h(mdl,fnm, oldmdl) else mdl
 }

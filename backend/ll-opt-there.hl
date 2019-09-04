@@ -68,7 +68,7 @@ function ll_to_genssa2(src) {
                                     
       | extractvalue -> 'call'([], 'ir2-extractvalue', 'const'('ir2aggtype'(), t), v, idx)
       | insertvalue -> 'call'([], 'ir2-insertvalue', v, mktype(tv), elt, idx)
-      | alloca -> 'call'([], 'ir2-alloca', mktype(t))
+      | alloca -> 'call'([], 'ir2-alloca', mktype(t),@map n in varname do 'other'('ident'(), n))
       | load -> 'call'([], 'ir2-load', ptr)
       | getelementptr -> 'call'([], 'ir2-getelementptr', ptr, @idxs)
       | getelementptr_inbounds -> 'call'([], 'ir2-getelementptr_inbounds', ptr, @idxs)
