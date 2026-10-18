@@ -28,6 +28,8 @@
 litinclude ("../doc/clike-ast") "./clike-ast.hl";
 ////// Compiler environment support
 include "./clike-env.hl";
+////// Local variable scoping (distinct names for same-named sibling declarations)
+include "./clike-scopes.hl";
 ////// Compiler pipeline (after macro expansion)
 //////   Types propagation, implicit casts, injections:
 litinclude ("../doc/clike-types-utils") "./clike-types-utils.hl";

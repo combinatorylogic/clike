@@ -15,7 +15,8 @@ function clike_compile_code(toploop, env, code, crettype, rettype)
 {
   clike_dbg(1, "S0:",code);
 
-  step1 = clike_types(env, code, toploop, crettype);
+  code0 = clike_scope_locals(code);           clike_dbg(1,"S0s:",code0);
+  step1 = clike_types(env, code0, toploop, crettype);
                                              clike_dbg(1,"S1:",step1);
   step2 = clike_precompile(env, step1);      clike_dbg(2,"S2:",step2);
   step3 = clike_fix_sets(step2);             clike_dbg(3,"S3:",step3);

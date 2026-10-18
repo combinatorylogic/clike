@@ -1,0 +1,102 @@
+////// Local variable scoping.
+//////
+////// Later stages key a function's locals by name (the typing table, the alloca names the
+////// SSA construction works on), so two sibling declarations of the same name are treated as
+////// one variable: eight `for (int32 k ...)` loops in one kernel shared one counter and the
+////// HLS lowering chained their phi nodes. This pass gives every declaration whose name is
+////// declared more than once in the function a distinct name (`k`, `k__2`, `k__3` ...) and
+////// renames the references. Names declared once keep their spelling, so array port names
+////// stay stable.
+//////
+////// Scopes: the function body, a `for` (its init, condition, step and body) and a `begin`.
+////// The macro expander wraps declarations in a `begin` (`int32 a, b;`, comma lists in a
+////// for-init), so a declaration made in a `begin` stays visible after it unless an
+////// enclosing scope declares the same name; that keeps wrapper blocks transparent and real
+////// blocks shadowing.
+//////
+////// Limitation: declarations inside expression blocks (`({ ... })`) are not scoped.
+
+function clike_scope_locals(code) {
+   counts = mkhash();
+   bump(nm) = {
+      c = ohashget(counts, nm);
+      ohashput(counts, nm, if (c) c + 1 else 1)};
+   iter:clike(llcode: code) {
+      deep llcode {
+         vardef -> { match name with ['v'; nm] -> bump(nm) | else -> [] }
+       | varinit -> bump(l)
+       | else -> []}};
+   conflicting(nm) = { c = ohashget(counts, nm); if (c) c > 1 else [] };
+
+   // A scope chain is a list of hashes, innermost first; only conflicting names are stored.
+   resolve(scopes, nm) =
+      do loop(s = scopes) {
+         match s with
+            h:tl -> aif(chk = ohashget(h, nm)) chk else loop(tl)
+          | else -> nm};
+   declared_in(scopes, nm) =
+      do loop(s = scopes) {
+         match s with
+            h:tl -> if (ohashget(h, nm)) true else loop(tl)
+          | else -> []};
+   seq = mkref(1);
+   declare(scopes, nm) =
+      if (conflicting(nm)) {
+         seq := ^seq + 1;
+         nn = %Sm<<(nm, "__", ^seq);
+         ohashput(car(scopes), nm, nn);
+         return nn
+      } else nm;
+   leave(scopes) = {
+      inner = car(scopes); outer = cdr(scopes);
+      if (outer)
+         hashiter(fun(nm, nn) {
+                     if (not(declared_in(outer, nm))) ohashput(car(outer), nm, nn)
+                  }, inner)};
+
+   renexpr(scopes, e) =
+      visit:clike(llexpr: e) {
+         deep llexpr { var -> mk:node(nm = resolve(scopes, nm)) | else -> node };
+         deep lvalue { var -> mk:node(nm = resolve(scopes, nm)) | else -> node };
+         deep lltmacroarg { var -> mk:node(v = resolve(scopes, v)) | else -> node }};
+   renlv(scopes, l) =
+      visit:clike(lvalue: l) {
+         deep llexpr { var -> mk:node(nm = resolve(scopes, nm)) | else -> node };
+         deep lvalue { var -> mk:node(nm = resolve(scopes, nm)) | else -> node };
+         deep lltmacroarg { var -> mk:node(v = resolve(scopes, v)) | else -> node }};
+
+   // Statements are walked explicitly, in program order, so that a declaration is registered
+   // before the references that follow it. Forms without nested statements or names pass through.
+   return do walk(scopes = [mkhash()], c = code) {
+      match c with
+         ['begin'; @es] -> {
+            ns = mkhash():scopes;
+            r = 'begin'(@map e in es do walk(ns, e));
+            leave(ns);
+            return r}
+       | ['for'; LOC; init; cnd; step; body] -> {
+            ns = mkhash():scopes;
+            ninit = map i in init do walk(ns, i);
+            ncnd = renexpr(ns, cnd);
+            nstep = walk(ns, step);
+            nbody = walk(ns, body);
+            return 'for'(LOC, ninit, ncnd, nstep, nbody)}
+       | ['while'; LOC; cnd; body] -> 'while'(LOC, renexpr(scopes, cnd), walk(scopes, body))
+       | ['do'; LOC; body; cnd] -> { nb = walk(scopes, body); 'do'(LOC, nb, renexpr(scopes, cnd)) }
+       | ['if3'; LOC; e; tr; fl] -> { ne = renexpr(scopes, e); ntr = walk(scopes, tr); 'if3'(LOC, ne, ntr, walk(scopes, fl)) }
+       | ['if2'; LOC; e; tr] -> { ne = renexpr(scopes, e); 'if2'(LOC, ne, walk(scopes, tr)) }
+       | ['switch'; LOC; e; opts; dflt] -> {
+            ne = renexpr(scopes, e);
+            nopts = map [v; a] in opts do [v; walk(scopes, a)];
+            return 'switch'(LOC, ne, nopts, map d in dflt do walk(scopes, d))}
+       | ['vardef'; tp; name] -> { match name with
+                                    ['v'; nm] -> 'vardef'(tp, 'v'(declare(scopes, nm)))
+                                  | else -> c }
+       | ['varinit'; l; r] -> { nr = renexpr(scopes, r); 'varinit'(declare(scopes, l), nr) }
+       | ['set'; LOC; l; e] -> 'set'(LOC, renlv(scopes, l), renexpr(scopes, e))
+       | ['expr'; e] -> 'expr'(renexpr(scopes, e))
+       | ['return'; LOC; e] -> 'return'(LOC, renexpr(scopes, e))
+       | ['passexpr'; e] -> 'passexpr'(renexpr(scopes, e))
+       | ['passlvalue'; e] -> 'passlvalue'(renlv(scopes, e))
+       | else -> c}
+}
